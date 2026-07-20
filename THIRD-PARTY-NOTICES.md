@@ -8,6 +8,9 @@ PaperNote Desktop includes or depends on the following third-party components. T
 | SkiaSharp | 3.119.2 | MIT | Microsoft Corporation and contributors | https://github.com/mono/SkiaSharp |
 | SkiaSharp.NativeAssets.Win32 | 3.119.2 | MIT plus bundled third-party notices | Microsoft Corporation and contributors | https://github.com/mono/SkiaSharp |
 | bblanchon.PDFium.Win32 | 147.0.7690 | Apache-2.0 | Copyright © Benoît Blanchon 2017-2025 | https://github.com/bblanchon/pdfium-binaries |
+| GSAP | 3.14.2 | GreenSock Standard “No Charge” License | GreenSock, Inc. | https://gsap.com/standard-license/ |
+
+GSAP is included only in the reproducible promotional video project under `videos/papernote-promo/`; it is not linked into the PaperNote desktop executable.
 
 The dependency graph can be reviewed with:
 

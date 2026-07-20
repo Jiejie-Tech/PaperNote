@@ -507,3 +507,6 @@ $RECYCLE.BIN/
 *.tmp
 *.temp
 /~$*
+# Generated HyperFrames workspace helpers
+videos/**/AGENTS.md
+videos/**/CLAUDE.md

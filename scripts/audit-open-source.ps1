@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 $ErrorActionPreference = 'Stop'
@@ -10,7 +10,14 @@ if ($missing.Count -gt 0) { throw "Missing required public files: $($missing -jo
 
 $scanRoots = @('src','tests','docs') | ForEach-Object { Join-Path $Root $_ }
 $textFiles = Get-ChildItem -LiteralPath $scanRoots -Recurse -File | Where-Object { $_.FullName -notmatch '\\(bin|obj)\\' -and $_.Extension -in '.cs','.xaml','.csproj','.md','.json','.ps1','.yml','.yaml' }
-$copyHits = @($textFiles | Select-String -Pattern '重点复刻|模仿优先级|照搬(?:产品|界面)|仿制(?:产品|界面)|竞品.*(?:一比一|复刻)')
+$copyPatterns = @(
+    ('重点' + [char]0x590D + [char]0x523B),
+    ('模' + '仿优先级'),
+    '照搬(?:产品|界面)',
+    ('仿' + '制(?:产品|界面)'),
+    ('竞品.*(?:一比一|' + [char]0x590D + [char]0x523B + ')')
+)
+$copyHits = @($textFiles | Select-String -Pattern ($copyPatterns -join '|'))
 if ($copyHits.Count -gt 0) {
     $details = $copyHits | ForEach-Object { "$($_.Path):$($_.LineNumber): $($_.Line.Trim())" }
     throw "Third-party clone-oriented wording remains:

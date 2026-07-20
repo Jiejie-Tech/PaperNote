@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920, height=1080" />
+  <title>PaperNote Promo</title>
+  <script src="./assets/vendor/gsap.min.js"></script>
+  <style>
+    @font-face{font-family:"Microsoft YaHei";src:local("Microsoft YaHei")} @font-face{font-family:"Segoe UI";src:local("Segoe UI")}
+    :root{--teal:#0f766e;--teal-dark:#0a4f4a;--mint:#ddf5f1;--paper:#f7fbfa;--ink:#102a2a;--muted:#54706e;--blue:#3b82f6;--yellow:#f5c451}
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--paper);font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;color:var(--ink)}
+    #root{position:relative;width:1920px;height:1080px;overflow:hidden;background:radial-gradient(circle at 16% 12%,#d8f3ef 0,rgba(216,243,239,.55) 26%,transparent 58%),linear-gradient(135deg,#f8fcfb,#edf8f6)}
+    .grid{position:absolute;inset:0;opacity:.2;background-image:linear-gradient(rgba(15,118,110,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(15,118,110,.12) 1px,transparent 1px);background-size:42px 42px;mask-image:linear-gradient(to right,black,transparent 72%)}
+    .clip{position:absolute;inset:0;overflow:hidden}
+    .brand{display:flex;align-items:center;gap:24px}.logo{width:108px;height:108px;border-radius:30px;background:var(--teal);display:grid;place-items:center;color:#fff;font:800 66px "Segoe UI";box-shadow:0 18px 40px rgba(15,118,110,.22)}
+    .wordmark{font:800 78px "Segoe UI";letter-spacing:-2px}.eyebrow{font-size:28px;font-weight:700;color:var(--teal);letter-spacing:4px;text-transform:uppercase}.headline{margin:0;font-size:92px;line-height:1.12;letter-spacing:-3px}.sub{font-size:38px;color:var(--muted);line-height:1.55}.pill-row{display:flex;gap:16px;flex-wrap:wrap}.pill{padding:15px 25px;border-radius:999px;background:var(--mint);color:var(--teal-dark);font-size:27px;font-weight:800}
+    .panel{background:#fff;border:2px solid rgba(15,118,110,.35);border-radius:34px;box-shadow:0 30px 70px rgba(13,70,66,.18);overflow:hidden}.screen{display:block;width:100%;height:100%;object-fit:contain;background:white}
+    .scene-title{font-size:70px;line-height:1.18;margin:0;font-weight:900;letter-spacing:-2px}.scene-sub{font-size:31px;line-height:1.5;color:var(--muted);margin-top:22px}.number{font:800 24px "Segoe UI";color:var(--teal);letter-spacing:3px}
+    .accent-line{height:8px;background:var(--teal);border-radius:8px;transform-origin:left center}
+    .scene-head{position:absolute;left:100px;top:94px;width:620px}.scene-card{position:absolute;right:86px;top:130px;width:1090px;height:765px}
+    .caption{position:absolute;left:100px;bottom:86px;font-size:26px;color:var(--teal-dark);font-weight:700}
+    .highlight{position:absolute;border:5px solid var(--teal);border-radius:18px;box-shadow:0 0 0 8px rgba(15,118,110,.13)}
+    .tool-chip{padding:16px 23px;border-radius:18px;background:#fff;border:2px solid rgba(15,118,110,.22);box-shadow:0 14px 35px rgba(10,79,74,.12);font-size:27px;font-weight:800;color:var(--teal-dark)}
+    .paper-card{position:absolute;background:#fffefa;border-radius:28px;box-shadow:0 28px 65px rgba(10,62,58,.16);border:2px solid rgba(15,118,110,.18);overflow:hidden}
+    .paper-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(59,130,246,.17) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,.17) 1px,transparent 1px);background-size:34px 34px}
+    .doc-line{height:12px;border-radius:8px;background:#d7e2e0;margin-bottom:22px}.icon-card{width:250px;height:250px;border-radius:42px;background:#fff;border:2px solid rgba(15,118,110,.18);box-shadow:0 26px 60px rgba(10,62,58,.13);display:grid;place-items:center}.icon-card svg{width:126px;height:126px;stroke:var(--teal);stroke-width:6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+    .cta-button{display:inline-flex;align-items:center;gap:14px;padding:22px 38px;border-radius:22px;background:var(--teal);color:#fff;font-size:31px;font-weight:900;box-shadow:0 20px 45px rgba(15,118,110,.25)}
+    .footer-rule{position:absolute;left:100px;right:100px;bottom:48px;height:3px;background:rgba(15,118,110,.18);overflow:hidden;border-radius:6px}.footer-fill{height:100%;width:100%;background:var(--teal);transform-origin:left center}
+  </style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="45">
+  <div class="grid"></div>
+
+  <section id="s1" class="clip" data-start="0" data-duration="4" data-track-index="1">
+    <div style="position:absolute;left:145px;top:185px" class="brand s1-brand"><div class="logo">P</div><div class="wordmark">PaperNote</div></div>
+    <h1 class="headline s1-title" style="position:absolute;left:145px;top:410px;width:1220px">本地优先的 Windows<br><span style="color:var(--teal)">开源墨迹笔记应用</span></h1>
+    <div class="pill-row s1-pills" style="position:absolute;left:150px;top:730px"><div class="pill">无需账号</div><div class="pill">PDF 批注</div><div class="pill">触控笔支持</div><div class="pill">免费开源</div></div>
+    <svg style="position:absolute;right:110px;top:150px;width:500px;height:500px" viewBox="0 0 500 500"><path id="intro-ink" d="M35 330 C125 250 185 370 285 250 S430 170 470 80" fill="none" stroke="#0f766e" stroke-width="17" stroke-linecap="round"/><circle cx="468" cy="80" r="19" fill="#0f766e"/></svg>
+  </section>
+
+  <section id="s2" class="clip" data-start="4" data-duration="6" data-track-index="1">
+    <div class="scene-head"><div class="number">01 · LOCAL LIBRARY</div><h2 class="scene-title">把课程、计划和灵感<br><span style="color:var(--teal)">整理在本地资料库</span></h2><p class="scene-sub">分类、文件夹、封面、搜索与回收站，让每一本笔记都能快速找到。</p><div class="accent-line" style="width:240px"></div></div>
+    <div class="panel scene-card s2-screen"><img class="screen" src="./assets/images/library.png" alt="PaperNote library"></div>
+    <div class="highlight h1" style="left:914px;top:230px;width:302px;height:434px"></div><div class="highlight h2" style="left:1241px;top:230px;width:302px;height:434px"></div><div class="highlight h3" style="left:1568px;top:230px;width:270px;height:434px"></div>
+    <div class="caption">本地保存 · 清晰分类 · 随时打开</div>
+  </section>
+
+  <section id="s3" class="clip" data-start="10" data-duration="8" data-track-index="1">
+    <div class="scene-head" style="width:520px"><div class="number">02 · NATURAL INK</div><h2 class="scene-title">自然书写，<br><span style="color:var(--teal)">按你的方式落笔</span></h2><p class="scene-sub">适配触控笔、数位板和鼠标，支持多笔型、压感与平滑设置。</p></div>
+    <div class="panel" style="position:absolute;left:650px;top:118px;width:1190px;height:820px"><img class="screen" src="./assets/images/editor.png" alt="PaperNote editor"></div>
+    <svg style="position:absolute;left:1005px;top:340px;width:550px;height:180px" viewBox="0 0 550 180"><path id="write-ink" d="M22 128 C105 104 173 118 250 77 C334 33 390 108 525 29" fill="none" stroke="#0f766e" stroke-width="14" stroke-linecap="round"/></svg>
+    <div class="pill-row s3-tools" style="position:absolute;left:100px;bottom:105px;width:510px"><div class="tool-chip">钢笔</div><div class="tool-chip">荧光笔</div><div class="tool-chip">橡皮</div><div class="tool-chip">套索</div></div>
+  </section>
+
+  <section id="s4" class="clip" data-start="18" data-duration="7" data-track-index="1">
+    <div class="scene-head"><div class="number">03 · ORGANIZE</div><h2 class="scene-title">模板、分页、<br><span style="color:var(--teal)">书签和目录</span></h2><p class="scene-sub">从快速插页到页面总览，把长笔记整理成清晰结构。</p></div>
+    <div class="panel" style="position:absolute;left:760px;top:128px;width:1020px;height:720px"><img class="screen" src="./assets/images/editor-pages.png" alt="PaperNote editor pages"></div>
+    <div class="paper-card pc1" style="left:620px;top:515px;width:260px;height:360px;transform:rotate(-7deg)"><div class="paper-grid"></div><div style="position:absolute;left:25px;right:25px;bottom:25px;font-size:28px;font-weight:900">方格纸</div></div>
+    <div class="paper-card pc2" style="left:880px;top:570px;width:260px;height:360px;transform:rotate(2deg)"><div style="position:absolute;inset:45px 24px;background:repeating-linear-gradient(to bottom,transparent 0 42px,rgba(59,130,246,.26) 43px 45px)"></div><div style="position:absolute;left:25px;right:25px;bottom:25px;font-size:28px;font-weight:900">横线纸</div></div>
+    <div class="paper-card pc3" style="left:1140px;top:515px;width:260px;height:360px;transform:rotate(8deg)"><div style="position:absolute;inset:0;background-image:radial-gradient(circle,rgba(59,130,246,.35) 2px,transparent 2px);background-size:28px 28px"></div><div style="position:absolute;left:25px;right:25px;bottom:25px;font-size:28px;font-weight:900">点阵纸</div></div>
+    <div class="pill-row s4-pills" style="position:absolute;left:108px;top:650px;width:460px"><div class="pill">页面总览</div><div class="pill">书签筛选</div><div class="pill">三级目录</div></div>
+  </section>
+
+  <section id="s5" class="clip" data-start="25" data-duration="7" data-track-index="1">
+    <div class="scene-head"><div class="number">04 · PDF ANNOTATION</div><h2 class="scene-title">导入 PDF，<br><span style="color:var(--teal)">批注后重新导出</span></h2><p class="scene-sub">选择页码范围、旋转和裁边，再叠加笔迹、文字与形状。</p></div>
+    <div class="paper-card pdf-card" style="left:830px;top:100px;width:760px;height:860px;padding:92px 90px"><div style="position:absolute;left:0;right:0;top:0;height:64px;background:#edf3f2;border-bottom:2px solid #dbe9e7"></div><div class="doc-line" style="width:78%;background:#9cb8b4"></div><div class="doc-line" style="width:92%"></div><div class="doc-line" style="width:86%"></div><div class="doc-line" style="width:72%"></div><div class="doc-line" style="width:94%"></div><div class="doc-line" style="width:64%"></div><div class="doc-line" style="width:89%"></div><div class="doc-line" style="width:76%"></div><div class="doc-line" style="width:92%"></div><div class="doc-line" style="width:58%"></div><div class="highlight-mark" style="position:absolute;left:80px;top:310px;width:500px;height:42px;background:rgba(245,196,81,.55);border-radius:10px;transform:rotate(-2deg)"></div><div class="crop-frame" style="position:absolute;left:56px;right:56px;top:82px;bottom:50px;border:6px dashed var(--teal);border-radius:8px"></div><svg style="position:absolute;left:120px;top:560px;width:490px;height:170px" viewBox="0 0 490 170"><path id="pdf-ink" d="M12 122 C90 44 154 145 225 70 S365 90 470 26" fill="none" stroke="#3b82f6" stroke-width="12" stroke-linecap="round"/></svg></div>
+    <div class="pill-row s5-pills" style="position:absolute;left:108px;top:660px;width:570px"><div class="pill">页码范围</div><div class="pill">旋转裁边</div><div class="pill">高清导出</div></div>
+  </section>
+
+  <section id="s6" class="clip" data-start="32" data-duration="6" data-track-index="1">
+    <div style="position:absolute;left:100px;top:105px;width:1720px;text-align:center"><div class="number">05 · LOCAL FIRST</div><h2 class="scene-title" style="font-size:78px">无需账号 · 无需订阅 · 无需云服务</h2><p class="scene-sub" style="font-size:34px">核心笔记数据默认保存在自己的电脑上</p></div>
+    <div style="position:absolute;left:330px;right:330px;top:475px;display:flex;justify-content:space-between;align-items:center"><div class="icon-card ic1"><svg viewBox="0 0 128 128"><rect x="16" y="22" width="96" height="68" rx="8"/><path d="M8 104h112M48 90v14M80 90v14"/></svg></div><div class="connect" style="width:190px;height:8px;border-radius:8px;background:var(--teal);transform-origin:left center"></div><div class="icon-card ic2"><svg viewBox="0 0 128 128"><path d="M20 20h52l28 28v60H20z"/><path d="M72 20v30h28M38 72h44M38 88h34"/></svg></div><div class="connect" style="width:190px;height:8px;border-radius:8px;background:var(--teal);transform-origin:left center"></div><div class="icon-card ic3"><svg viewBox="0 0 128 128"><path d="M64 12l42 16v32c0 28-18 47-42 57C40 107 22 88 22 60V28z"/><path d="M43 64l14 14 29-32"/></svg></div></div>
+    <div class="pill-row s6-pills" style="position:absolute;left:548px;bottom:95px"><div class="pill">自动保存</div><div class="pill">历史版本</div><div class="pill">整库备份</div></div>
+  </section>
+
+  <section id="s7" class="clip" data-start="38" data-duration="7" data-track-index="1">
+    <div style="position:absolute;left:110px;top:110px;width:680px"><div class="brand s7-brand"><div class="logo" style="width:88px;height:88px;border-radius:24px;font-size:54px">P</div><div class="wordmark" style="font-size:64px">PaperNote</div></div><h2 class="scene-title" style="margin-top:100px;font-size:82px">现在就开始<br><span style="color:var(--teal)">自由书写</span></h2><p class="scene-sub">PaperNote Desktop v1.0.0<br>Windows 10/11 · 免费开源</p><div class="cta-button" style="margin-top:42px">立即下载 <span>→</span></div><p style="margin-top:28px;font-size:25px;color:var(--muted)">GitHub / Gitee 搜索 PaperNote</p></div>
+    <div class="panel s7-card" style="position:absolute;right:80px;top:140px;width:980px;height:630px"><img class="screen" src="./assets/images/social-preview.png" alt="PaperNote social preview"></div>
+    <div class="pill-row s7-pills" style="position:absolute;right:208px;bottom:112px"><div class="pill">本地保存</div><div class="pill">PDF 批注</div><div class="pill">触控笔支持</div></div>
+  </section>
+
+  <div class="footer-rule"><div class="footer-fill"></div></div>
+</div>
+<script>
+  window.__timelines = window.__timelines || {};
+  const tl = gsap.timeline({paused:true, defaults:{ease:"power3.out"}});
+
+  tl.from(".s1-brand",{y:46,opacity:0,duration:.75},.15)
+    .from(".s1-title",{y:58,opacity:0,duration:.85},.45)
+    .from(".s1-pills .pill",{y:26,opacity:0,duration:.45,stagger:.11},1.15)
+    .fromTo("#intro-ink",{strokeDasharray:900,strokeDashoffset:900},{strokeDashoffset:0,duration:1.7,ease:"power2.inOut"},.55);
+  tl.from("#s2 .scene-head > *",{x:-45,opacity:0,duration:.55,stagger:.12},4.15)
+    .from(".s2-screen",{x:110,scale:.94,opacity:0,duration:.9},4.2)
+    .from("#s2 .highlight",{scale:.8,opacity:0,duration:.32,stagger:.7},5.5);
+  tl.from("#s3 .scene-head > *",{x:-45,opacity:0,duration:.55,stagger:.12},10.15)
+    .from("#s3 .panel",{x:100,opacity:0,scale:.96,duration:.9},10.15)
+    .fromTo("#write-ink",{strokeDasharray:850,strokeDashoffset:850},{strokeDashoffset:0,duration:2.3,ease:"power2.inOut"},11.2)
+    .from(".s3-tools .tool-chip",{y:28,opacity:0,scale:.9,duration:.45,stagger:.28},12.0)
+    .to("#s3 .panel img",{scale:1.05,x:-30,y:-15,duration:5,ease:"none"},11.2);
+  tl.from("#s4 .scene-head > *",{x:-45,opacity:0,duration:.55,stagger:.12},18.12)
+    .from("#s4 .panel",{x:90,opacity:0,duration:.75},18.2)
+    .from([".pc1",".pc2",".pc3"],{y:150,opacity:0,scale:.82,duration:.65,stagger:.32},19.1)
+    .from(".s4-pills .pill",{x:-30,opacity:0,duration:.4,stagger:.18},20.0);
+  tl.from("#s5 .scene-head > *",{x:-45,opacity:0,duration:.55,stagger:.12},25.15)
+    .from(".pdf-card",{y:90,opacity:0,scale:.94,duration:.85},25.15)
+    .from(".crop-frame",{opacity:0,scale:.94,duration:.55},26.0)
+    .from(".highlight-mark",{scaleX:0,transformOrigin:"left center",duration:.7},26.35)
+    .fromTo("#pdf-ink",{strokeDasharray:800,strokeDashoffset:800},{strokeDashoffset:0,duration:1.8,ease:"power2.inOut"},26.8)
+    .from(".s5-pills .pill",{y:24,opacity:0,duration:.4,stagger:.2},28.1);
+  tl.from("#s6 .scene-title",{y:38,opacity:0,duration:.7},32.15)
+    .from("#s6 .scene-sub",{y:26,opacity:0,duration:.55},32.55)
+    .from("#s6 .icon-card",{y:60,opacity:0,scale:.82,duration:.6,stagger:.65},33.0)
+    .from("#s6 .connect",{scaleX:0,duration:.55,stagger:.65},33.45)
+    .from(".s6-pills .pill",{y:24,opacity:0,duration:.4,stagger:.18},35.2);
+  tl.from(".s7-brand",{x:-45,opacity:0,duration:.65},38.15)
+    .from("#s7 .scene-title",{y:55,opacity:0,duration:.75},38.55)
+    .from("#s7 .scene-sub",{y:25,opacity:0,duration:.5},39.0)
+    .from(".cta-button",{y:30,opacity:0,scale:.94,duration:.55},39.4)
+    .from(".s7-card",{x:110,opacity:0,scale:.94,duration:.85},38.4)
+    .from(".s7-pills .pill",{y:22,opacity:0,duration:.4,stagger:.16},40.1)
+    .to(".s7-card",{y:-10,scale:1.015,duration:3.8,ease:"sine.inOut"},40.5);
+  tl.fromTo(".footer-fill",{scaleX:0},{scaleX:1,duration:45,ease:"none"},0);
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>

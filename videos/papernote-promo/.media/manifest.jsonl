@@ -1,0 +1,3 @@
+{"id":"image_001","type":"image","path":"assets/images/editor.png","source":"existing","description":"editor","width":1440,"height":900,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_002","type":"image","path":"assets/images/library.png","source":"existing","description":"library","width":1440,"height":900,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_003","type":"image","path":"assets/images/social-preview.png","source":"existing","description":"social preview","width":1280,"height":640,"provenance":{"provider":"local","adopted":true}}
