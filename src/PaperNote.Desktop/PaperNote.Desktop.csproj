@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>PaperNote.Desktop</AssemblyName>
+    <RootNamespace>PaperNote.Desktop</RootNamespace>
+    <Product>PaperNote Desktop</Product>
+    <Title>PaperNote Desktop</Title>
+    <Description>Local-first handwriting and PDF annotation app for Windows.</Description>
+    <Authors>PaperNote contributors</Authors>
+    <Copyright>Copyright © 2026 PaperNote contributors</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+    <NeutralLanguage>zh-CN</NeutralLanguage>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PDFtoImage" Version="5.2.1" />
+  </ItemGroup>
+
+</Project>

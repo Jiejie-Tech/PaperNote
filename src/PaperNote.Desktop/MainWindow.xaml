@@ -1,0 +1,819 @@
+﻿<Window x:Class="PaperNote.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="PaperNote"
+        Width="1440"
+        Height="900"
+        MinWidth="1050"
+        MinHeight="680"
+        WindowStartupLocation="CenterScreen"
+        Background="#F4F5F2"
+        FontFamily="Segoe UI, Microsoft YaHei UI"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        Loaded="Window_Loaded"
+        Closing="Window_Closing"
+        Closed="Window_Closed">
+    <Window.Resources>
+        <SolidColorBrush x:Key="AccentBrush" Color="#0F766E" />
+        <SolidColorBrush x:Key="ToolbarBorderBrush" Color="#E5E7EB" />
+        <DropShadowEffect x:Key="PageShadow" Color="#6B7280" BlurRadius="22" ShadowDepth="4" Opacity="0.20" />
+        <DropShadowEffect x:Key="CardShadow" Color="#526A65" BlurRadius="18" ShadowDepth="3" Opacity="0.14" />
+
+        <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="MinWidth" Value="38" />
+            <Setter Property="Margin" Value="3,0" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#30343B" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonBorder" Property="Background" Value="#ECFDF5" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonBorder" Property="Background" Value="#CCFBF1" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarButtonStyle}">
+            <Setter Property="Background" Value="#0F766E" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="18,0" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="ToolRadioStyle" TargetType="RadioButton">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="MinWidth" Value="54" />
+            <Setter Property="Margin" Value="3,0" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Foreground" Value="#30343B" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="ToolBorder" Background="Transparent" CornerRadius="9" Padding="{TemplateBinding Padding}">
+                            <TextBlock Text="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ToolBorder" Property="Background" Value="#ECFDF5" /></Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ToolBorder" Property="Background" Value="#D5F0EB" />
+                                <Setter Property="Foreground" Value="#0D9488" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ColorRadioStyle" TargetType="RadioButton">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Margin" Value="3,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid>
+                            <Ellipse x:Name="Outer" Fill="Transparent" Stroke="Transparent" StrokeThickness="2" />
+                            <Ellipse Margin="5" Fill="{TemplateBinding Background}" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Outer" Property="Stroke" Value="#C9D2E3" /></Trigger>
+                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Outer" Property="Stroke" Value="#0F766E" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PageListItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="10,8" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ItemBorder" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="2" CornerRadius="10" Padding="8">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="#F0F3F8" /></Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#DCF4F0" />
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#0F766E" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DrawingBrush x:Key="DottedPaperBrush" TileMode="Tile" Viewport="0,0,24,24" ViewportUnits="Absolute" Stretch="None">
+            <DrawingBrush.Drawing>
+                <GeometryDrawing Brush="#D6DAE2">
+                    <GeometryDrawing.Geometry><EllipseGeometry Center="2,2" RadiusX="0.8" RadiusY="0.8" /></GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+        <DrawingBrush x:Key="LinedPaperBrush" TileMode="Tile" Viewport="0,0,24,24" ViewportUnits="Absolute" Stretch="None">
+            <DrawingBrush.Drawing>
+                <GeometryDrawing>
+                    <GeometryDrawing.Pen><Pen Brush="#D8DDE6" Thickness="1" /></GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry><LineGeometry StartPoint="0,23.5" EndPoint="24,23.5" /></GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+        <DrawingBrush x:Key="GridPaperBrush" TileMode="Tile" Viewport="0,0,24,24" ViewportUnits="Absolute" Stretch="None">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen><Pen Brush="#D8DDE6" Thickness="1" /></GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry><LineGeometry StartPoint="0,23.5" EndPoint="24,23.5" /></GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen><Pen Brush="#D8DDE6" Thickness="1" /></GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry><LineGeometry StartPoint="23.5,0" EndPoint="23.5,24" /></GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+    </Window.Resources>
+
+    <Grid>
+        <!-- 笔记本书架 -->
+        <Grid x:Name="LibraryView" Background="#F3F5F1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="78" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="34" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="White" BorderBrush="#E5E7EB" BorderThickness="0,0,0,1">
+                <Grid Margin="30,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="280" />
+                        <ColumnDefinition Width="116" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Width="38" Height="38" Background="{StaticResource AccentBrush}" CornerRadius="12">
+                            <TextBlock Text="P" Foreground="White" FontSize="21" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="PaperNote Desktop" FontSize="20" FontWeight="SemiBold" Foreground="#202124" />
+                            <TextBlock x:Name="LibraryHeadingText" Text="全部笔记" FontSize="12" Foreground="#6B7280" Margin="1,2,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBox x:Name="LibrarySearchBox" Grid.Column="1" Height="38" Margin="12,0,8,0" Padding="12,5" VerticalAlignment="Center" VerticalContentAlignment="Center" BorderBrush="#CDD3DE" TextChanged="LibrarySearchBox_TextChanged" ToolTip="搜索标题、文件夹、页面标题、文字和来源文件名" />
+                    <ComboBox x:Name="LibrarySortCombo" Grid.Column="2" Height="38" Margin="0,0,8,0" VerticalAlignment="Center" SelectionChanged="LibrarySortCombo_SelectionChanged" ToolTip="书架排序方式">
+                        <ComboBoxItem Content="最近修改" Tag="Modified" IsSelected="True" />
+                        <ComboBoxItem Content="最近打开" Tag="Opened" />
+                        <ComboBoxItem Content="标题排序" Tag="Title" />
+                    </ComboBox>
+                    <Button x:Name="LibraryBackupButton" Grid.Column="3" Style="{StaticResource ToolbarButtonStyle}" Height="42" Margin="0,0,8,0" Click="LibraryBackupActions_Click" ToolTip="导出或恢复整个本地资料库">资料库备份⌄</Button>
+                    <Button Grid.Column="4" Style="{StaticResource PrimaryButtonStyle}" Height="42" Click="NewNotebook_Click">＋ 新建笔记</Button>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="216" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Background="#FAFBFC" BorderBrush="#E5E7EB" BorderThickness="0,0,1,0">
+                    <DockPanel Margin="18,24,16,20">
+                        <TextBlock DockPanel.Dock="Top" Text="本地空间" FontSize="12" FontWeight="SemiBold" Foreground="#9197A3" Margin="10,0,0,10" />
+                        <ListBox x:Name="LibraryFilterList" SelectionChanged="LibraryFilterList_SelectionChanged" Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0,2" />
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="FilterBorder" Background="{TemplateBinding Background}" CornerRadius="9" Padding="12,10">
+                                                    <ContentPresenter />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="FilterBorder" Property="Background" Value="#ECFDF5" /></Trigger>
+                                                    <Trigger Property="IsSelected" Value="True"><Setter TargetName="FilterBorder" Property="Background" Value="#D9F2EE" /></Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="26" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Icon}" FontSize="15" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="13" Foreground="#333842" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        <Border Grid.Column="2" Background="#E5E7EB" CornerRadius="9" MinWidth="24" Padding="6,2">
+                                            <TextBlock Text="{Binding CountText}" FontSize="10" Foreground="#68707E" HorizontalAlignment="Center" />
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Border>
+
+                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="30,28,30,50">
+                        <ItemsControl x:Name="NotebookList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Width="226" Height="352" Margin="0,0,26,28">
+                                        <Border Background="White" BorderBrush="#E1E4EA" BorderThickness="1" CornerRadius="14" Effect="{StaticResource CardShadow}" />
+                                        <Button Tag="{Binding FilePath}" Click="OpenNotebookCard_Click" IsEnabled="{Binding CanOpen}" Background="Transparent" BorderThickness="0" Cursor="Hand" Padding="14">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="246" />
+                                                    <RowDefinition Height="*" />
+                                                </Grid.RowDefinitions>
+                                                <Border Background="{Binding CoverBrush}" CornerRadius="8" ClipToBounds="True">
+                                                    <Grid>
+                                                        <Border Width="16" HorizontalAlignment="Left" Background="#24000000" />
+                                                        <Border Margin="29,18,15,18" Background="#FFFDFB" BorderBrush="#40FFFFFF" BorderThickness="1" CornerRadius="3" ClipToBounds="True">
+                                                            <Grid>
+                                                                <Image Source="{Binding CoverThumbnail}" Stretch="Uniform" Margin="5" Opacity="0.94" />
+                                                                <Border VerticalAlignment="Bottom" Height="34" Background="#D9FFFFFF">
+                                                                    <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="#333842" HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Width="145" TextAlignment="Center" />
+                                                                </Border>
+                                                            </Grid>
+                                                        </Border>
+                                                    </Grid>
+                                                </Border>
+                                                <StackPanel Grid.Row="1" Margin="2,13,2,0" HorizontalAlignment="Left">
+                                                    <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" Foreground="#25282E" TextTrimming="CharacterEllipsis" Width="185" />
+                                                    <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
+                                                        <TextBlock Text="{Binding PageCountText}" FontSize="12" Foreground="#6E7582" />
+                                                        <TextBlock Text=" · " FontSize="12" Foreground="#A0A5AF" />
+                                                        <TextBlock Text="{Binding FolderText}" FontSize="12" Foreground="#6E7582" TextTrimming="CharacterEllipsis" Width="105" />
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding ModifiedText}" FontSize="11" Foreground="#9AA0AC" Margin="0,3,0,0" />
+                                                    <TextBlock Text="{Binding MatchText}" Visibility="{Binding MatchVisibility}" FontSize="11" Foreground="#0F766E" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" Width="185" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                        <Button Tag="{Binding FilePath}" Click="DeleteNotebook_Click" Visibility="{Binding NormalActionsVisibility}" Width="30" Height="30" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,9,9,0" Background="#EFFFFFFF" Foreground="#6B7280" BorderThickness="0" Cursor="Hand" ToolTip="移到回收站">×</Button>
+                                        <StackPanel Visibility="{Binding TrashActionsVisibility}" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,9,9,0">
+                                            <Button Tag="{Binding FilePath}" Click="RestoreNotebook_Click" Height="30" Padding="10,0" Background="#EFFFFFFF" Foreground="#0F766E" BorderThickness="0" Cursor="Hand" ToolTip="恢复笔记本">恢复</Button>
+                                            <Button Tag="{Binding FilePath}" Click="PermanentlyDeleteNotebook_Click" Width="30" Height="30" Margin="4,0,0,0" Background="#EFFFFFFF" Foreground="#D84A4A" BorderThickness="0" Cursor="Hand" ToolTip="永久删除">×</Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock x:Name="EmptyLibraryText" Text="这里还没有笔记本" FontSize="16" Foreground="#8B92A0" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+                    </Grid>
+                </ScrollViewer>
+            </Grid>
+
+            <Border Grid.Row="2" Background="White" BorderBrush="#E5E7EB" BorderThickness="0,1,0,0">
+                <TextBlock x:Name="LibraryStatusText" Text="笔记本保存在本机文档文件夹中" Margin="30,0" VerticalAlignment="Center" FontSize="12" Foreground="#8A909C" />
+            </Border>
+        </Grid>
+        <!-- 编辑器 -->
+        <Grid x:Name="EditorView" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="90" />
+                <RowDefinition Height="58" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="30" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource ToolbarBorderBrush}" BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="54" /><RowDefinition Height="36" /></Grid.RowDefinitions>
+                    <Grid Grid.Row="0" Margin="12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Style="{StaticResource ToolbarButtonStyle}" Click="BackToLibrary_Click" ToolTip="返回本地资料库">‹ 资料库</Button>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button x:Name="NotebookTabsButton" Style="{StaticResource ToolbarButtonStyle}" Click="NotebookTabs_Click" ToolTip="快速切换已打开的笔记本">标签页</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="ToggleSidebar_Click" ToolTip="显示或隐藏页面侧栏">☰ 页面</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="OpenPageOverview_Click" ToolTip="打开页面网格总览 (Ctrl+Shift+O)">▦ 总览</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="OpenOutline_Click" ToolTip="打开笔记目录 (Ctrl+Shift+D)">☷ 目录</Button>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                        <TextBox x:Name="NotebookTitleBox" Width="220" FontSize="17" FontWeight="SemiBold" Foreground="#202124" BorderThickness="0" Background="Transparent" VerticalContentAlignment="Center" TextChanged="NotebookTitleBox_TextChanged" ToolTip="点击修改笔记本名称" />
+                        <TextBlock Text="文件夹" Margin="12,0,5,0" FontSize="11" Foreground="#8A909C" VerticalAlignment="Center" />
+                        <ComboBox x:Name="NotebookFolderCombo" Width="104" Height="30" IsEditable="True" ItemsSource="{Binding}" SelectionChanged="NotebookFolderCombo_SelectionChanged" LostKeyboardFocus="NotebookFolderCombo_LostKeyboardFocus" KeyDown="NotebookFolderCombo_KeyDown" ToolTip="选择或输入文件夹名称" />
+                        <TextBlock Text="封面" Margin="10,0,5,0" FontSize="11" Foreground="#8A909C" VerticalAlignment="Center" />
+                        <ComboBox x:Name="CoverStyleCombo" Width="78" Height="30" SelectionChanged="CoverStyleCombo_SelectionChanged" ToolTip="选择笔记本封面">
+                            <ComboBoxItem Content="蓝色" Tag="Blue" />
+                            <ComboBoxItem Content="紫色" Tag="Purple" />
+                            <ComboBoxItem Content="绿色" Tag="Green" />
+                            <ComboBoxItem Content="米色" Tag="Beige" />
+                            <ComboBoxItem Content="红色" Tag="Red" />
+                        </ComboBox>
+                        <TextBlock x:Name="SaveStateText" Text="已保存" Margin="10,2,0,0" FontSize="12" Foreground="#7B8190" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal">
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="NewNotebook_Click" ToolTip="新建笔记本">新建</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="OpenInk_Click" ToolTip="把 ISF 笔迹导入当前页">导入笔迹</Button>
+                        <Button x:Name="ImportPdfButton" Style="{StaticResource ToolbarButtonStyle}" Click="ImportPdf_Click" ToolTip="把多页 PDF 导入为可书写批注的页面">导入 PDF</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="SaveNow_Click" ToolTip="立即保存 (Ctrl+S)">保存</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="NotebookHistory_Click" ToolTip="查看自动备份、创建版本或恢复旧内容">历史版本</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="ExportInk_Click" ToolTip="导出当前页可编辑笔迹">导出笔迹</Button>
+                        <Button x:Name="ExportPdfButton" Style="{StaticResource ToolbarButtonStyle}" Click="ExportPdf_Click" ToolTip="把整本笔记导出为扁平 PDF">导出 PDF</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="PdfPageActions_Click" ToolTip="旋转、裁剪或重置当前 PDF 页面">PDF 页面⌄</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="ToggleReadOnly_Click" ToolTip="只读/编辑模式"><TextBlock x:Name="ReadOnlyButtonText" Text="只读" /></Button>
+                    </StackPanel>
+                    </Grid>
+                    <Border Grid.Row="1" Background="#FAFBFD" BorderBrush="#E8EAF0" BorderThickness="0,1,0,0">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Padding="10,3">
+                            <StackPanel x:Name="NotebookTabStripPanel" Orientation="Horizontal" />
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource ToolbarBorderBrush}" BorderThickness="0,0,0,1">
+                <Grid Margin="12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="UndoButton" Style="{StaticResource ToolbarButtonStyle}" Click="Undo_Click" ToolTip="撤销 (Ctrl+Z)" IsEnabled="False"><TextBlock Text="↶" FontSize="24" /></Button>
+                        <Button x:Name="RedoButton" Style="{StaticResource ToolbarButtonStyle}" Click="Redo_Click" ToolTip="重做 (Ctrl+Y)" IsEnabled="False"><TextBlock Text="↷" FontSize="24" /></Button>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                        <RadioButton x:Name="PenTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="笔" Tag="Pen" IsChecked="True" Checked="Tool_Checked" />
+                        <Button x:Name="PenSettingsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="62" Padding="7,0" Click="PenSettings_Click" ToolTip="笔型、压感、平滑和快捷笔预设">钢笔⌄</Button>
+                        <RadioButton x:Name="HighlighterTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="荧光笔" Tag="Highlighter" Checked="Tool_Checked" />
+                        <RadioButton x:Name="EraserTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="橡皮" Tag="Eraser" Checked="Tool_Checked" />
+                        <RadioButton x:Name="SelectTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="套索" Tag="Select" Checked="Tool_Checked" />
+                        <RadioButton x:Name="PanTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="浏览" Tag="Pan" Checked="Tool_Checked" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="纸张" VerticalAlignment="Center" Margin="8,0,6,0" Foreground="#6B7280" />
+                        <ComboBox x:Name="PaperTemplateCombo" Width="82" Height="32" SelectedIndex="1" SelectionChanged="PaperTemplateCombo_SelectionChanged" ToolTip="当前页纸张模板">
+                            <ComboBoxItem Content="空白" Tag="Blank" />
+                            <ComboBoxItem Content="点阵" Tag="Dotted" />
+                            <ComboBoxItem Content="横线" Tag="Lined" />
+                            <ComboBoxItem Content="方格" Tag="Grid" />
+                        </ComboBox>
+                        <ComboBox x:Name="PaperColorCombo" Width="78" Height="32" Margin="6,0,0,0" SelectedIndex="0" SelectionChanged="PaperColorCombo_SelectionChanged" ToolTip="当前页纸张颜色">
+                            <ComboBoxItem Content="白色" Tag="#FFFFFF" />
+                            <ComboBoxItem Content="米黄" Tag="#FFFBEA" />
+                            <ComboBoxItem Content="浅蓝" Tag="#F0FAF8" />
+                            <ComboBoxItem Content="浅绿" Tag="#F2FAF3" />
+                        </ComboBox>
+                        <Button x:Name="ImagePaperActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="68" Padding="7,0" Margin="5,0,0,0" Click="ImagePaperActions_Click" ToolTip="把图片作为整页纸张背景">图片纸张⌄</Button>
+                        <Border Width="1" Height="28" Background="#E5E7EB" Margin="9,0,6,0" />
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="44" Padding="7,0" Click="InsertText_Click" ToolTip="插入可编辑文本框">文本</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="44" Padding="7,0" Click="InsertImage_Click" ToolTip="插入本机图片">图片</Button>
+                        <Button x:Name="ShapeActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="52" Padding="7,0" Click="ShapeActions_Click" ToolTip="插入矩形、圆形、三角形、菱形、箭头等">形状⌄</Button>
+                        <Button x:Name="TextActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="52" Padding="7,0" Click="TextActions_Click" ToolTip="复制或导出当前笔记中的可提取文字">文字⌄</Button>
+                        <Button x:Name="SharedPaperTemplatesButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="68" Padding="7,0" Click="SharedPaperTemplates_Click" ToolTip="跨笔记保存和复用自定义纸张">模板库⌄</Button>
+<Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectActions_Click" ToolTip="复制、组合和层级操作">对象⌄</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectStyles_Click" ToolTip="修改文字、形状和图片样式">样式⌄</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectArrange_Click" ToolTip="对齐、分布、旋转、层级和锁定对象">排列⌄</Button>
+                    </StackPanel>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="粗细" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="#6B7280" />
+                        <Slider x:Name="ThicknessSlider" Width="112" Minimum="1" Maximum="20" Value="3.2" VerticalAlignment="Center" ValueChanged="ThicknessSlider_ValueChanged" />
+                        <TextBlock x:Name="ThicknessText" Text="3.2" Width="34" VerticalAlignment="Center" Margin="6,0,8,0" Foreground="#4B5563" />
+                        <Border Width="1" Height="28" Background="#E5E7EB" Margin="2,0,8,0" />
+                        <RadioButton x:Name="BlackColor" GroupName="InkColors" Style="{StaticResource ColorRadioStyle}" Background="#202124" Tag="#202124" IsChecked="True" Checked="Color_Checked" ToolTip="黑色" />
+                        <RadioButton x:Name="BlueColor" GroupName="InkColors" Style="{StaticResource ColorRadioStyle}" Background="#0F766E" Tag="#0F766E" Checked="Color_Checked" ToolTip="蓝色" />
+                        <RadioButton x:Name="RedColor" GroupName="InkColors" Style="{StaticResource ColorRadioStyle}" Background="#E84A5F" Tag="#E84A5F" Checked="Color_Checked" ToolTip="红色" />
+                        <RadioButton x:Name="GreenColor" GroupName="InkColors" Style="{StaticResource ColorRadioStyle}" Background="#2FA36B" Tag="#2FA36B" Checked="Color_Checked" ToolTip="绿色" />
+                        <RadioButton x:Name="YellowColor" GroupName="InkColors" Style="{StaticResource ColorRadioStyle}" Background="#F4C542" Tag="#F4C542" Checked="Color_Checked" ToolTip="黄色" />
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Click="ClearPage_Click" ToolTip="清空当前页面">清空</Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="SidebarColumn" Width="230" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="#FAFAFB" BorderBrush="#E2E4E9" BorderThickness="0,0,1,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="74" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="128" />
+                        </Grid.RowDefinitions>
+                        <Grid Grid.Row="0" Margin="12,6,12,5">
+                            <Grid.RowDefinitions><RowDefinition Height="25" /><RowDefinition Height="32" /></Grid.RowDefinitions>
+                            <DockPanel Grid.Row="0">
+                                <TextBlock Text="页面" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="#535967" />
+                                <ToggleButton x:Name="BookmarkedPagesOnlyToggle" DockPanel.Dock="Right" MinWidth="72" Height="24" Padding="5,1" Content="★ 仅书签" Click="BookmarkedPagesOnlyToggle_Click" ToolTip="只显示已加书签的页面" />
+                            </DockPanel>
+                            <TextBox x:Name="PageSearchBox" Grid.Row="1" Height="28" Padding="8,3" VerticalContentAlignment="Center" BorderBrush="#D8DDE7" TextChanged="PageSearchBox_TextChanged" ToolTip="搜索页码、页面标题或页面中的文字" />
+                        </Grid>
+                        <ListBox x:Name="PageListBox" Grid.Row="1" BorderThickness="0" Background="Transparent" SelectionMode="Extended" ItemContainerStyle="{StaticResource PageListItemStyle}" SelectionChanged="PageListBox_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel>
+                                        <Grid Width="150" HorizontalAlignment="Center">
+                                            <Border Background="White" CornerRadius="4" BorderBrush="#D9DDE5" BorderThickness="1" ClipToBounds="True">
+                                                <Image Source="{Binding Thumbnail}" Width="150" Height="212" Stretch="Fill" />
+                                            </Border>
+                                            <Button CommandParameter="{Binding}" Click="TogglePageBookmark_Click" Style="{StaticResource ToolbarButtonStyle}" Width="29" MinWidth="29" Height="27" Padding="0" Margin="0,5,5,0" HorizontalAlignment="Right" VerticalAlignment="Top" Background="#EFFFFFFF" Foreground="#D79212" FontSize="16" ToolTip="添加或取消页面书签" Content="{Binding BookmarkGlyph}" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding DisplayTitle}" Margin="0,6,0,0" Foreground="#303642" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
+                                        <Grid Margin="0,3,0,0">
+                                            <TextBlock Text="{Binding NumberText}" HorizontalAlignment="Left" VerticalAlignment="Center" Foreground="#707784" FontSize="11" />
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                <Button CommandParameter="{Binding}" Click="DuplicatePage_Click" Style="{StaticResource ToolbarButtonStyle}" Width="25" MinWidth="25" Height="25" Padding="0" Margin="1,0" ToolTip="复制页面 (Ctrl+D)">⧉</Button>
+                                                <Button CommandParameter="{Binding}" Click="MovePageUp_Click" Style="{StaticResource ToolbarButtonStyle}" Width="25" MinWidth="25" Height="25" Padding="0" Margin="1,0" ToolTip="上移">↑</Button>
+                                                <Button CommandParameter="{Binding}" Click="MovePageDown_Click" Style="{StaticResource ToolbarButtonStyle}" Width="25" MinWidth="25" Height="25" Padding="0" Margin="1,0" ToolTip="下移">↓</Button>
+                                                <Button CommandParameter="{Binding}" Click="DeletePage_Click" Style="{StaticResource ToolbarButtonStyle}" Width="25" MinWidth="25" Height="25" Padding="0" Margin="1,0" Foreground="#C24152" ToolTip="删除">×</Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <StackPanel Grid.Row="2" Margin="12,5">
+                            <Grid Margin="0,0,0,5">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBox x:Name="PageTitleBox" Grid.Column="0" Height="28" MaxLength="60" Padding="7,3" VerticalContentAlignment="Center" BorderBrush="#D8DDE7" TextChanged="PageTitleBox_TextChanged" ToolTip="当前页面标题，最多 60 个字" />
+                                <Button x:Name="CurrentPageBookmarkButton" Grid.Column="1" Style="{StaticResource ToolbarButtonStyle}" MinWidth="64" Height="28" Padding="5,2" Margin="5,0,0,0" Click="CurrentPageBookmark_Click" Foreground="#B87500">☆ 书签</Button>
+                                <Button x:Name="CurrentPageOutlineButton" Grid.Column="2" Style="{StaticResource ToolbarButtonStyle}" MinWidth="58" Height="28" Padding="5,2" Margin="5,0,0,0" Click="CurrentPageOutline_Click" ToolTip="把当前页加入笔记目录">目录⌄</Button>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Style="{StaticResource ToolbarButtonStyle}" MinWidth="61" Padding="6,4" Click="MoveSelectedPagesUp_Click" ToolTip="把选中的页面整体上移">批量 ↑</Button>
+                                <Button Style="{StaticResource ToolbarButtonStyle}" MinWidth="61" Padding="6,4" Click="MoveSelectedPagesDown_Click" ToolTip="把选中的页面整体下移">批量 ↓</Button>
+                                <Button Style="{StaticResource ToolbarButtonStyle}" MinWidth="61" Padding="6,4" Click="BatchPageActions_Click" ToolTip="批量复制、删除、书签、旋转或裁剪选中页面">批量操作⌄</Button>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
+                                <Button x:Name="ExportSelectedPdfButton" Style="{StaticResource ToolbarButtonStyle}" MinWidth="92" Padding="8,4" Click="ExportSelectedPdf_Click" ToolTip="把选中的页面导出为 PDF">选页 PDF</Button>
+                                <Button Style="{StaticResource ToolbarButtonStyle}" MinWidth="92" Padding="8,4" Background="#E6F6F3" Foreground="#0D9488" Click="AddPage_Click">＋ 添加页面</Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Column="1" Background="#ECEEF2">
+                    <ScrollViewer x:Name="CanvasScrollViewer" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" CanContentScroll="False" PanningMode="Both" PreviewMouseWheel="CanvasScrollViewer_PreviewMouseWheel">
+                        <Grid Margin="70,38,70,70">
+                            <Border x:Name="PageHost" Width="840" Height="1188" Background="White" BorderBrush="#D9DCE3" BorderThickness="1" Effect="{DynamicResource PageShadow}">
+                                <Border.LayoutTransform><ScaleTransform x:Name="PageScale" ScaleX="1" ScaleY="1" /></Border.LayoutTransform>
+                                <Grid>
+                                    <Rectangle x:Name="PageTemplateLayer" Fill="{StaticResource DottedPaperBrush}" IsHitTestVisible="False" />
+                                    <Image x:Name="PageBackgroundImage" Stretch="Fill" IsHitTestVisible="False" />
+                                    <InkCanvas x:Name="InkSurface" Background="Transparent" EditingMode="Ink" EditingModeInverted="EraseByStroke" UseCustomCursor="False"
+                                               PreviewStylusDown="InkSurface_PreviewStylusDown" PreviewStylusMove="InkSurface_PreviewStylusMove" PreviewStylusUp="InkSurface_PreviewStylusUp"
+                                               PreviewMouseLeftButtonDown="InkSurface_PreviewMouseLeftButtonDown" PreviewMouseMove="InkSurface_PreviewMouseMove" PreviewMouseLeftButtonUp="InkSurface_PreviewMouseLeftButtonUp"
+                                               SelectionMoving="InkSurface_SelectionMoving" SelectionMoved="InkSurface_SelectionMoved"
+                                               SelectionResizing="InkSurface_SelectionResizing" SelectionResized="InkSurface_SelectionResized" StrokeCollected="InkSurface_StrokeCollected" />
+                                    <Canvas x:Name="ObjectLayer" Width="840" Height="1188" Background="{x:Null}" ClipToBounds="True" />
+                                    <Canvas x:Name="LassoOverlay" Width="840" Height="1188" Background="{x:Null}" IsHitTestVisible="False" ClipToBounds="True">
+                                        <Polyline x:Name="MixedLassoLine" Stroke="#0F766E" StrokeThickness="2" StrokeDashArray="4,3" Fill="#180F766E" Visibility="Collapsed" />
+                                    </Canvas>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+
+            <Border Grid.Row="3" Background="White" BorderBrush="#E5E7EB" BorderThickness="0,1,0,0">
+                <Grid Margin="12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="StatusText" Grid.Column="0" Text="准备就绪 · 钢笔" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,18,0">
+                        <Button x:Name="PageHistoryBackButton" Style="{StaticResource ToolbarButtonStyle}" Width="28" MinWidth="28" Height="25" Padding="0" Margin="0" Click="PageHistoryBack_Click" ToolTip="返回上一个访问过的页面" IsEnabled="False">←</Button>
+                        <Button x:Name="PageHistoryForwardButton" Style="{StaticResource ToolbarButtonStyle}" Width="28" MinWidth="28" Height="25" Padding="0" Margin="0,0,6,0" Click="PageHistoryForward_Click" ToolTip="前往下一个访问过的页面" IsEnabled="False">→</Button>
+                        <Button x:Name="PreviousPageButton" Style="{StaticResource ToolbarButtonStyle}" Width="28" MinWidth="28" Height="25" Padding="0" Margin="0" Click="PreviousPage_Click" ToolTip="上一页 (PageUp)">‹</Button>
+                        <TextBlock Text="第" VerticalAlignment="Center" Margin="5,0,4,0" FontSize="12" Foreground="#6B7280" />
+                        <TextBox x:Name="PageJumpBox" Width="42" Height="24" Padding="4,1" TextAlignment="Center" VerticalContentAlignment="Center" BorderBrush="#D8DDE7" KeyDown="PageJumpBox_KeyDown" LostKeyboardFocus="PageJumpBox_LostKeyboardFocus" ToolTip="输入页码并按 Enter，Ctrl+J 可快速聚焦" />
+                        <TextBlock x:Name="CurrentPageCountText" Text="/ 0 页" VerticalAlignment="Center" Margin="4,0" FontSize="12" Foreground="#6B7280" />
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Width="34" MinWidth="34" Height="25" Padding="0" Margin="0,0,2,0" Click="JumpToPage_Click" ToolTip="跳转到输入的页码">跳</Button>
+                        <Button x:Name="NextPageButton" Style="{StaticResource ToolbarButtonStyle}" Width="28" MinWidth="28" Height="25" Padding="0" Margin="0" Click="NextPage_Click" ToolTip="下一页 (PageDown)">›</Button>
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Text="缩放" VerticalAlignment="Center" FontSize="12" Foreground="#6B7280" Margin="0,0,8,0" />
+                    <StackPanel Grid.Column="3" Orientation="Horizontal">
+                        <Slider x:Name="ZoomSlider" Width="110" Minimum="50" Maximum="180" Value="85" ValueChanged="ZoomSlider_ValueChanged" />
+                        <TextBlock x:Name="ZoomText" Text="85%" Width="44" VerticalAlignment="Center" TextAlignment="Right" FontSize="12" Foreground="#4B5563" />
+                    </StackPanel>
+                    <Button Grid.Column="4" Style="{StaticResource ToolbarButtonStyle}" Width="32" MinWidth="32" Height="25" Padding="0" Margin="8,0,0,0" Click="OpenPageOverview_Click" ToolTip="页面总览">▦</Button>
+                </Grid>
+            </Border>
+
+            <!-- PDF 自定义裁剪 -->
+            <Border x:Name="PdfCropEditorOverlay" Grid.RowSpan="4" Panel.ZIndex="70" Visibility="Collapsed" Background="#B8202530">
+                <Border Width="980" MaxHeight="720" Padding="28" Background="White" CornerRadius="18" HorizontalAlignment="Center" VerticalAlignment="Center" Effect="{DynamicResource CardShadow}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="420" />
+                            <ColumnDefinition Width="34" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="自定义 PDF 裁剪" FontSize="22" FontWeight="SemiBold" Foreground="#20242C" />
+                            <TextBlock Text="拖动蓝色边框，或在右侧精确调整四边。深色区域不会显示在页面中。" Margin="0,6,0,16" TextWrapping="Wrap" Foreground="#6E7581" />
+                            <Border Width="420" Height="594" BorderBrush="#CDD3DD" BorderThickness="1" Background="#F2F3F6" ClipToBounds="True">
+                                <Canvas Width="420" Height="594" ClipToBounds="True">
+                                    <Image x:Name="PdfCropPreviewImage" Width="420" Height="594" Stretch="Fill" />
+                                    <Rectangle x:Name="PdfCropShadeLeft" Fill="#920F1722" IsHitTestVisible="False" />
+                                    <Rectangle x:Name="PdfCropShadeTop" Fill="#920F1722" IsHitTestVisible="False" />
+                                    <Rectangle x:Name="PdfCropShadeRight" Fill="#920F1722" IsHitTestVisible="False" />
+                                    <Rectangle x:Name="PdfCropShadeBottom" Fill="#920F1722" IsHitTestVisible="False" />
+                                    <Rectangle x:Name="PdfCropFrame" Stroke="#0F766E" StrokeThickness="3" Fill="Transparent" IsHitTestVisible="False" />
+                                    <Thumb x:Name="PdfCropLeftThumb" Tag="Left" Width="14" Height="68" Cursor="SizeWE" Background="#0F766E" DragDelta="PdfCropThumb_DragDelta" />
+                                    <Thumb x:Name="PdfCropRightThumb" Tag="Right" Width="14" Height="68" Cursor="SizeWE" Background="#0F766E" DragDelta="PdfCropThumb_DragDelta" />
+                                    <Thumb x:Name="PdfCropTopThumb" Tag="Top" Width="68" Height="14" Cursor="SizeNS" Background="#0F766E" DragDelta="PdfCropThumb_DragDelta" />
+                                    <Thumb x:Name="PdfCropBottomThumb" Tag="Bottom" Width="68" Height="14" Cursor="SizeNS" Background="#0F766E" DragDelta="PdfCropThumb_DragDelta" />
+                                </Canvas>
+                            </Border>
+                        </StackPanel>
+                        <Grid Grid.Column="2" Margin="0,4,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="裁剪比例" FontSize="17" FontWeight="SemiBold" Foreground="#2A2F38" Margin="0,0,0,14" />
+                            <Grid Grid.Row="1" Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="44" /><ColumnDefinition Width="*" /><ColumnDefinition Width="46" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="左侧" VerticalAlignment="Center" Foreground="#4E5663" />
+                                <Slider x:Name="PdfCropLeftSlider" Grid.Column="1" Minimum="0" Maximum="45" TickFrequency="1" ValueChanged="PdfCropSlider_ValueChanged" />
+                                <TextBlock x:Name="PdfCropLeftValue" Grid.Column="2" Text="0%" TextAlignment="Right" VerticalAlignment="Center" Foreground="#0F766E" FontWeight="SemiBold" />
+                            </Grid>
+                            <Grid Grid.Row="2" Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="44" /><ColumnDefinition Width="*" /><ColumnDefinition Width="46" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="上侧" VerticalAlignment="Center" Foreground="#4E5663" />
+                                <Slider x:Name="PdfCropTopSlider" Grid.Column="1" Minimum="0" Maximum="45" TickFrequency="1" ValueChanged="PdfCropSlider_ValueChanged" />
+                                <TextBlock x:Name="PdfCropTopValue" Grid.Column="2" Text="0%" TextAlignment="Right" VerticalAlignment="Center" Foreground="#0F766E" FontWeight="SemiBold" />
+                            </Grid>
+                            <Grid Grid.Row="3" Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="44" /><ColumnDefinition Width="*" /><ColumnDefinition Width="46" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="右侧" VerticalAlignment="Center" Foreground="#4E5663" />
+                                <Slider x:Name="PdfCropRightSlider" Grid.Column="1" Minimum="0" Maximum="45" TickFrequency="1" ValueChanged="PdfCropSlider_ValueChanged" />
+                                <TextBlock x:Name="PdfCropRightValue" Grid.Column="2" Text="0%" TextAlignment="Right" VerticalAlignment="Center" Foreground="#0F766E" FontWeight="SemiBold" />
+                            </Grid>
+                            <Grid Grid.Row="4" Margin="0,0,0,18">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="44" /><ColumnDefinition Width="*" /><ColumnDefinition Width="46" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="下侧" VerticalAlignment="Center" Foreground="#4E5663" />
+                                <Slider x:Name="PdfCropBottomSlider" Grid.Column="1" Minimum="0" Maximum="45" TickFrequency="1" ValueChanged="PdfCropSlider_ValueChanged" />
+                                <TextBlock x:Name="PdfCropBottomValue" Grid.Column="2" Text="0%" TextAlignment="Right" VerticalAlignment="Center" Foreground="#0F766E" FontWeight="SemiBold" />
+                            </Grid>
+                            <StackPanel Grid.Row="5">
+                                <TextBlock Text="快速预设" Foreground="#777E89" Margin="0,0,0,8" />
+                                <WrapPanel>
+                                    <Button Style="{StaticResource ToolbarButtonStyle}" Tag="0" Click="PdfCropPreset_Click">清除裁剪</Button>
+                                    <Button Style="{StaticResource ToolbarButtonStyle}" Tag="0.05" Click="PdfCropPreset_Click">四边 5%</Button>
+                                    <Button Style="{StaticResource ToolbarButtonStyle}" Tag="0.10" Click="PdfCropPreset_Click">四边 10%</Button>
+                                </WrapPanel>
+                                <Border Margin="0,18,0,0" Padding="14" Background="#F1F7F5" CornerRadius="10">
+                                    <StackPanel>
+                                        <TextBlock x:Name="PdfCropRetainedText" Text="保留区域：100% × 100%" FontWeight="SemiBold" Foreground="#115E59" />
+                                        <TextBlock Text="每边最多裁剪 45%，始终至少保留 10% 的页面宽度和高度。" Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#737A86" FontSize="12" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+                                <Button Style="{StaticResource ToolbarButtonStyle}" MinWidth="84" Click="ClosePdfCropEditor_Click">取消</Button>
+                                <Button Style="{StaticResource PrimaryButtonStyle}" MinWidth="112" Margin="8,0,0,0" Click="ApplyPdfCropEditor_Click">应用裁剪</Button>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Border>
+
+            <!-- PDF 导出设置 -->
+            <Border x:Name="PdfExportOptionsOverlay" Grid.RowSpan="4" Panel.ZIndex="65" Visibility="Collapsed" Background="#B8202530">
+                <Border Width="540" Padding="30" Background="White" CornerRadius="18" HorizontalAlignment="Center" VerticalAlignment="Center" Effect="{DynamicResource CardShadow}">
+                    <StackPanel>
+                        <TextBlock Text="导出 PDF" FontSize="23" FontWeight="SemiBold" Foreground="#20242C" />
+                        <TextBlock x:Name="PdfExportOptionsScopeText" Text="导出范围：全部页面" Margin="0,7,0,24" Foreground="#707783" />
+                        <TextBlock Text="文件质量" FontWeight="SemiBold" Foreground="#343A45" Margin="0,0,0,7" />
+                        <ComboBox x:Name="PdfExportQualityCombo" Height="38" SelectionChanged="PdfExportOption_SelectionChanged">
+                            <ComboBoxItem Content="较小文件 · 适合快速分享" Tag="Draft" />
+                            <ComboBoxItem Content="标准 · 清晰度与大小平衡" Tag="Standard" IsSelected="True" />
+                            <ComboBoxItem Content="高清 · 适合打印和放大" Tag="High" />
+                        </ComboBox>
+                        <TextBlock Text="页面尺寸" FontWeight="SemiBold" Foreground="#343A45" Margin="0,18,0,7" />
+                        <ComboBox x:Name="PdfExportPageSizeCombo" Height="38" SelectionChanged="PdfExportOption_SelectionChanged">
+                            <ComboBoxItem Content="A4 · 常用打印纸" Tag="A4" IsSelected="True" />
+                            <ComboBoxItem Content="A5 · 便携笔记尺寸" Tag="A5" />
+                            <ComboBoxItem Content="Letter · 美式信纸" Tag="Letter" />
+                        </ComboBox>
+                        <Border Margin="0,20,0,0" Padding="14" Background="#F1F7F5" CornerRadius="10">
+                            <TextBlock x:Name="PdfExportOptionsSummaryText" Text="A4 · 标准" Foreground="#115E59" TextWrapping="Wrap" />
+                        </Border>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,26,0,0">
+                            <Button Style="{StaticResource ToolbarButtonStyle}" MinWidth="84" Click="CancelPdfExportOptions_Click">取消</Button>
+                            <Button Style="{StaticResource PrimaryButtonStyle}" MinWidth="126" Margin="8,0,0,0" Click="ContinuePdfExport_Click">选择保存位置</Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Border>
+
+            <!-- PDF 导入范围 -->
+            <Border x:Name="PdfImportOptionsOverlay" Grid.RowSpan="4" Panel.ZIndex="66" Visibility="Collapsed" Background="#B8202530">
+                <Border Width="560" Padding="30" Background="White" CornerRadius="18" HorizontalAlignment="Center" VerticalAlignment="Center" Effect="{DynamicResource CardShadow}">
+                    <StackPanel>
+                        <TextBlock Text="导入 PDF" FontSize="23" FontWeight="SemiBold" Foreground="#20242C" />
+                        <TextBlock x:Name="PdfImportFileText" Margin="0,7,0,3" FontWeight="SemiBold" Foreground="#3D4450" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="PdfImportPageCountText" Margin="0,0,0,22" Foreground="#707783" />
+                        <TextBlock Text="要导入的页码" FontWeight="SemiBold" Foreground="#343A45" Margin="0,0,0,7" />
+                        <TextBox x:Name="PdfImportRangeBox" Height="38" Padding="10,5" VerticalContentAlignment="Center" BorderBrush="#CBD2DF" TextChanged="PdfImportRangeBox_TextChanged" ToolTip="例如 1-3,5,8-10" />
+                        <TextBlock Text="可输入 1-3,5,8-10；也可以使用下面的快捷选择。" Margin="0,6,0,9" FontSize="12" Foreground="#7B818D" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource ToolbarButtonStyle}" Tag="All" Click="PdfImportPreset_Click">全部</Button>
+                            <Button Style="{StaticResource ToolbarButtonStyle}" Tag="Odd" Click="PdfImportPreset_Click">奇数页</Button>
+                            <Button Style="{StaticResource ToolbarButtonStyle}" Tag="Even" Click="PdfImportPreset_Click">偶数页</Button>
+                        </StackPanel>
+                        <Border Margin="0,15,0,0" Padding="13" Background="#F1F7F5" CornerRadius="10">
+                            <TextBlock x:Name="PdfImportRangeHintText" Text="正在检查页码…" Foreground="#115E59" TextWrapping="Wrap" />
+                        </Border>
+                        <TextBlock Text="插入位置" FontWeight="SemiBold" Foreground="#343A45" Margin="0,18,0,7" />
+                        <ComboBox x:Name="PdfImportPlacementCombo" Height="38">
+                            <ComboBoxItem Content="当前页之后" Tag="AfterCurrent" IsSelected="True" />
+                            <ComboBoxItem Content="当前页之前" Tag="BeforeCurrent" />
+                            <ComboBoxItem Content="笔记末尾" Tag="End" />
+                        </ComboBox>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,25,0,0">
+                            <Button Style="{StaticResource ToolbarButtonStyle}" MinWidth="84" Click="CancelPdfImportOptions_Click">取消</Button>
+                            <Button x:Name="PdfImportContinueButton" Style="{StaticResource PrimaryButtonStyle}" MinWidth="118" Margin="8,0,0,0" Click="ContinuePdfImport_Click">开始导入</Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Border>
+
+            <!-- 笔记目录 -->
+            <Border x:Name="OutlineOverlay" Grid.RowSpan="4" Panel.ZIndex="60" Visibility="Collapsed" Background="#B8202530">
+                <Border Width="680" Height="650" Background="White" CornerRadius="18" HorizontalAlignment="Center" VerticalAlignment="Center" Effect="{DynamicResource CardShadow}">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="76" /><RowDefinition Height="58" /><RowDefinition Height="*" /><RowDefinition Height="58" /></Grid.RowDefinitions>
+                        <Border Grid.Row="0" BorderBrush="#E2E5EA" BorderThickness="0,0,0,1">
+                            <Grid Margin="26,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="笔记目录" FontSize="22" FontWeight="SemiBold" Foreground="#252932" />
+                                    <TextBlock Text="按标题级别整理页面，双击条目即可跳转" Margin="0,4,0,0" FontSize="12" Foreground="#7B818D" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Style="{StaticResource ToolbarButtonStyle}" MinWidth="74" Click="CloseOutline_Click">完成</Button>
+                            </Grid>
+                        </Border>
+                        <TextBox x:Name="OutlineSearchBox" Grid.Row="1" Height="34" Margin="26,12,26,8" Padding="10,5" VerticalContentAlignment="Center" BorderBrush="#D6DBE5" TextChanged="OutlineSearchBox_TextChanged" ToolTip="搜索目录标题或页码" />
+                        <ListBox x:Name="OutlineListBox" Grid.Row="2" Margin="18,4" Padding="8" BorderThickness="0" Background="Transparent" SelectionMode="Single" MouseDoubleClick="OutlineListBox_MouseDoubleClick">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="{Binding Indent}" Padding="12,9" CornerRadius="8" Background="Transparent">
+                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="58" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding LevelText}" Foreground="#718096" FontSize="11" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold" Foreground="#2F3540" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding PageText}" Foreground="#6F7683" FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <Border Grid.Row="3" BorderBrush="#E2E5EA" BorderThickness="0,1,0,0">
+                            <Grid Margin="26,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="OutlineStatusText" Text="目录中有 0 个页面" VerticalAlignment="Center" Foreground="#6F7683" FontSize="12" />
+                                <Button Grid.Column="1" Style="{StaticResource PrimaryButtonStyle}" MinWidth="96" Click="OutlineJump_Click">打开页面</Button>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Border>
+
+            <Border x:Name="PageOverviewOverlay" Grid.RowSpan="4" Panel.ZIndex="50" Visibility="Collapsed" Background="#F7F8FA">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="64" />
+                        <RowDefinition Height="52" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="58" />
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Background="White" BorderBrush="#E2E5EA" BorderThickness="0,0,0,1">
+                        <Grid Margin="24,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="页面总览" FontSize="21" FontWeight="SemiBold" Foreground="#252932" VerticalAlignment="Center" />
+                                <TextBlock Text="  ·  可按 Ctrl 或 Shift 多选" FontSize="12" Foreground="#858C99" VerticalAlignment="Center" Margin="8,3,0,0" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource ToolbarButtonStyle}" MinWidth="74" Click="ClosePageOverview_Click" ToolTip="关闭总览 (Esc)">完成</Button>
+                        </Grid>
+                    </Border>
+                    <Grid Grid.Row="1" Margin="24,9,24,7">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBox x:Name="PageOverviewSearchBox" Height="34" MaxWidth="560" HorizontalAlignment="Left" Width="420" Padding="10,5" VerticalContentAlignment="Center" BorderBrush="#D6DBE5" TextChanged="PageOverviewSearchBox_TextChanged" ToolTip="搜索页码、标题或页面中的文字" />
+                        <ToggleButton x:Name="PageOverviewBookmarkedOnlyToggle" Grid.Column="1" MinWidth="92" Height="32" Padding="8,2" Content="★ 仅书签" Click="PageOverviewBookmarkedOnlyToggle_Click" ToolTip="只显示已加书签页面" />
+                    </Grid>
+                    <ListBox x:Name="PageOverviewListBox" Grid.Row="2" Margin="18,0" Padding="6" BorderThickness="0" Background="Transparent" SelectionMode="Extended" ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="PageOverviewListBox_SelectionChanged" MouseDoubleClick="PageOverviewListBox_MouseDoubleClick">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel IsItemsHost="True" /></ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Width" Value="224" />
+                                <Setter Property="Margin" Value="7" />
+                                <Setter Property="Padding" Value="10" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderBrush" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="2" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="OverviewItemBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="OverviewItemBorder" Property="Background" Value="#EDF1F7" /></Trigger>
+                                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="OverviewItemBorder" Property="Background" Value="#DFF7F2" /><Setter TargetName="OverviewItemBorder" Property="BorderBrush" Value="#0F766E" /></Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <Grid Width="180" HorizontalAlignment="Center">
+                                        <Border Background="White" CornerRadius="5" BorderBrush="#D5DAE3" BorderThickness="1" ClipToBounds="True" Effect="{DynamicResource CardShadow}">
+                                            <Image Source="{Binding Thumbnail}" Width="180" Height="255" Stretch="Fill" />
+                                        </Border>
+                                        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,7,7,0" Padding="6,2" Background="#EFFFFFFF" CornerRadius="10">
+                                            <TextBlock Text="{Binding BookmarkGlyph}" Foreground="#CB8610" FontSize="16" />
+                                        </Border>
+                                    </Grid>
+                                    <TextBlock Text="{Binding DisplayTitle}" Margin="3,10,3,0" Foreground="#303642" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
+                                    <TextBlock Text="{Binding NumberText}" Margin="3,3,3,0" Foreground="#747B88" FontSize="11" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Border Grid.Row="3" Background="White" BorderBrush="#E2E5EA" BorderThickness="0,1,0,0">
+                        <Grid Margin="24,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="PageOverviewStatusText" Text="显示 0 页" VerticalAlignment="Center" Foreground="#6F7683" FontSize="12" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource ToolbarButtonStyle}" Click="MoveSelectedPagesUp_Click" ToolTip="把所选页面整体向前移动">向前移</Button>
+                                <Button Style="{StaticResource ToolbarButtonStyle}" Click="MoveSelectedPagesDown_Click" ToolTip="把所选页面整体向后移动">向后移</Button>
+                                <Button Style="{StaticResource ToolbarButtonStyle}" Click="OverviewAddBookmarks_Click">加书签</Button>
+                                <Button Style="{StaticResource ToolbarButtonStyle}" Click="OverviewRemoveBookmarks_Click">取消书签</Button>
+                                <Button Style="{StaticResource ToolbarButtonStyle}" Click="BatchPageActions_Click">批量操作⌄</Button>
+                                <Button x:Name="OverviewJumpButton" Style="{StaticResource PrimaryButtonStyle}" MinWidth="92" Click="OverviewJumpToPage_Click">打开页面</Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
+
+
+
+
+
+
