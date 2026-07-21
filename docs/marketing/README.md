@@ -12,13 +12,15 @@
 
 ## 素材
 
+- 仓库产品首页主视觉：`../brand/product-hero.png`
 - 社交分享封面：`../brand/social-preview.png`
-- Windows 资料库截图：`../screenshots/PaperNote资料库.png`
-- Windows 编辑器截图：`../screenshots/PaperNote编辑器.png`
+- Windows 资料库截图：`../screenshots/desktop-library.png`
+- Windows 编辑器截图：`../screenshots/desktop-editor.png`
+- Android 编辑器截图：`../screenshots/android-editor.png`
 - 横版宣传视频：`../../videos/papernote-promo/renders/papernote-promo.mp4`
 - README 演示 GIF：`../brand/papernote-demo.gif`
 
-发布 Android 版本时应补充真实手机和平板截图，不使用设计稿冒充实际界面。
+对外发布时优先使用以上真实产品截图；更新界面后应同步替换素材，不使用设计稿冒充实际界面。
 
 ## 推荐标题
 
