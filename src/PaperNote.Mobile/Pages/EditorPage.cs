@@ -19,7 +19,11 @@ public sealed class EditorPage : ContentPage
     private readonly Grid _mainGrid;
     private readonly Button _undo;
     private readonly Button _redo;
+    private readonly Button _widthButton;
+    private readonly Button _colorButton;
+    private readonly Button _fingerButton;
     private readonly Dictionary<InkCanvasTool, Button> _toolButtons = [];
+    private readonly Dictionary<InkCanvasTool, string> _toolLabels = [];
     private CancellationTokenSource? _saveCts;
     private NotebookPage? _page;
     private bool _loading;
@@ -36,34 +40,50 @@ public sealed class EditorPage : ContentPage
         Shell.SetNavBarIsVisible(this, false);
 
         var back = UiTheme.Button("‹ 资料库", Back_Clicked);
+        back.AutomationId = "EditorBackButton";
         _title = new Entry { FontSize = 20, FontAttributes = FontAttributes.Bold, TextColor = UiTheme.Text, BackgroundColor = Colors.Transparent, MaxLength = 80, HorizontalOptions = LayoutOptions.Fill };
         _title.TextChanged += Title_TextChanged;
         var more = UiTheme.Button("更多", More_Clicked);
-        var header = new Grid { Padding = new Thickness(10, 8), ColumnDefinitions = { new ColumnDefinition(GridLength.Auto), new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) } };
+        more.AutomationId = "EditorMoreButton";
+        var header = new Grid
+        {
+            Padding = new Thickness(10, 8),
+            BackgroundColor = UiTheme.Surface,
+            ZIndex = 20,
+            ColumnDefinitions = { new ColumnDefinition(GridLength.Auto), new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) }
+        };
         header.Add(back); header.Add(_title, 1); header.Add(more, 2);
-
-        var toolbar = new HorizontalStackLayout { Spacing = 7, Padding = new Thickness(10, 5) };
-        AddTool(toolbar, InkCanvasTool.Pen, "钢笔");
-        AddTool(toolbar, InkCanvasTool.Highlighter, "荧光笔");
-        AddTool(toolbar, InkCanvasTool.Eraser, "橡皮擦");
-        AddTool(toolbar, InkCanvasTool.Pan, "平移");
-        _undo = UiTheme.Button("撤销", (_, _) => { _canvas.Undo(); UpdateHistory(); });
-        _redo = UiTheme.Button("重做", (_, _) => { _canvas.Redo(); UpdateHistory(); });
-        toolbar.Add(_undo); toolbar.Add(_redo);
-        toolbar.Add(UiTheme.Button("颜色", Color_Clicked));
-        toolbar.Add(UiTheme.Button("粗细", Width_Clicked));
-        toolbar.Add(UiTheme.Button("纸张", Template_Clicked));
-        toolbar.Add(UiTheme.Button("适合屏幕", (_, _) => _canvas.ResetViewport()));
-        var toolbarScroll = new ScrollView { Orientation = ScrollOrientation.Horizontal, HorizontalScrollBarVisibility = ScrollBarVisibility.Never, Content = toolbar, BackgroundColor = UiTheme.Surface };
 
         _canvas = new InkCanvasView
         {
             BackgroundColor = Color.FromArgb("#E7EAF1"),
-            FingerDrawingEnabled = Preferences.Default.Get("FingerDrawing", false)
+            FingerDrawingEnabled = Preferences.Default.Get("FingerDrawing", true)
         };
         _canvas.InkChanged += Canvas_InkChanged;
         _canvas.HistoryChanged += (_, _) => UpdateHistory();
 
+        var toolRow = CreateToolbarRow(4);
+        AddTool(toolRow, InkCanvasTool.Pen, "钢笔", 0);
+        AddTool(toolRow, InkCanvasTool.Highlighter, "荧光笔", 1);
+        AddTool(toolRow, InkCanvasTool.Eraser, "橡皮擦", 2);
+        AddTool(toolRow, InkCanvasTool.Pan, "平移", 3);
+
+        var settingRow = CreateToolbarRow(5);
+        _widthButton = CreateToolbarButton("粗细 3.2", Width_Clicked, "InkWidthButton");
+        _colorButton = CreateToolbarButton("颜色", Color_Clicked, "InkColorButton");
+        _fingerButton = CreateToolbarButton("手指：开", ToggleFingerDrawing_Clicked, "FingerDrawingButton");
+        _undo = CreateToolbarButton("撤销", (_, _) => { _canvas.Undo(); UpdateHistory(); }, "UndoButton");
+        _redo = CreateToolbarButton("重做", (_, _) => { _canvas.Redo(); UpdateHistory(); }, "RedoButton");
+        settingRow.Add(_widthButton, 0); settingRow.Add(_colorButton, 1); settingRow.Add(_fingerButton, 2); settingRow.Add(_undo, 3); settingRow.Add(_redo, 4);
+
+        var toolbar = new VerticalStackLayout
+        {
+            Spacing = 5,
+            Padding = new Thickness(8, 5, 8, 7),
+            BackgroundColor = UiTheme.Surface,
+            ZIndex = 20,
+            Children = { toolRow, settingRow }
+        };
         _pages = new CollectionView
         {
             ItemsSource = _pageCards,
@@ -91,19 +111,29 @@ public sealed class EditorPage : ContentPage
         pagePanel.Add(new Label { Text = "页面", FontSize = 18, FontAttributes = FontAttributes.Bold, Margin = new Thickness(14, 12), TextColor = UiTheme.Text });
         pagePanel.Add(_pages, 0, 1);
 
-        _mainGrid = new Grid { ColumnSpacing = 1, ColumnDefinitions = { new ColumnDefinition(0), new ColumnDefinition(GridLength.Star) } };
+        _mainGrid = new Grid
+        {
+            ColumnSpacing = 1,
+            IsClippedToBounds = true,
+            ZIndex = 0,
+            ColumnDefinitions = { new ColumnDefinition(0), new ColumnDefinition(GridLength.Star) }
+        };
         _mainGrid.Add(pagePanel); _mainGrid.Add(_canvas, 1);
 
-        _pageStatus = new Label { TextColor = UiTheme.Muted, VerticalTextAlignment = TextAlignment.Center };
+        _pageStatus = new Label { TextColor = UiTheme.Muted, FontSize = 12, LineBreakMode = LineBreakMode.TailTruncation, VerticalTextAlignment = TextAlignment.Center };
         var bottomButtons = new HorizontalStackLayout { Spacing = 7 };
         bottomButtons.Add(UiTheme.Button("页面", Pages_Clicked));
         bottomButtons.Add(UiTheme.Button("＋ 新页", AddPage_Clicked, primary: true));
         bottomButtons.Add(UiTheme.Button("PDF", Pdf_Clicked));
-        var bottom = new Grid { Padding = new Thickness(10, 7, 10, 10), ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) }, BackgroundColor = UiTheme.Surface };
+        var bottom = new Grid { Padding = new Thickness(10, 7, 10, 10), ZIndex = 20, ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) }, BackgroundColor = UiTheme.Surface };
         bottom.Add(_pageStatus); bottom.Add(bottomButtons, 1);
 
-        var root = new Grid { RowDefinitions = { new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Star), new RowDefinition(GridLength.Auto) } };
-        root.Add(header); root.Add(toolbarScroll, 0, 1); root.Add(_mainGrid, 0, 2); root.Add(bottom, 0, 3);
+        var root = new Grid
+        {
+            IsClippedToBounds = true,
+            RowDefinitions = { new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Star), new RowDefinition(GridLength.Auto) }
+        };
+        root.Add(header); root.Add(toolbar, 0, 1); root.Add(_mainGrid, 0, 2); root.Add(bottom, 0, 3);
         Content = root;
         SizeChanged += (_, _) => _mainGrid.ColumnDefinitions[0].Width = Width >= 900 ? 230 : 0;
     }
@@ -112,6 +142,8 @@ public sealed class EditorPage : ContentPage
     {
         base.OnAppearing();
         if (_repository.Current is null) { _ = Navigation.PopAsync(); return; }
+        _canvas.FingerDrawingEnabled = Preferences.Default.Get("FingerDrawing", true);
+        UpdateFingerDrawingButton();
         LoadNotebook();
     }
 
@@ -139,8 +171,7 @@ public sealed class EditorPage : ContentPage
         _repository.Current!.Document.CurrentPageId = page.Id;
         _canvas.Page = page;
         _canvas.Document = page.Ink;
-        var index = _repository.Current.Document.Pages.IndexOf(page);
-        _pageStatus.Text = $"第 {index + 1} / {_repository.Current.Document.Pages.Count} 页 · 自动保存";
+        UpdatePageStatus();
         _canvas.ResetViewport();
         UpdateHistory();
     }
@@ -153,11 +184,33 @@ public sealed class EditorPage : ContentPage
         for (var i = 0; i < notebook.Pages.Count; i++) _pageCards.Add(new PageCard { Page = notebook.Pages[i], Number = i + 1 });
     }
 
-    private void AddTool(HorizontalStackLayout toolbar, InkCanvasTool tool, string text)
+    private static Grid CreateToolbarRow(int columns)
     {
-        var button = UiTheme.Button(text, (_, _) => SelectTool(tool));
+        var row = new Grid { ColumnSpacing = 5, HeightRequest = 42 };
+        for (var i = 0; i < columns; i++) row.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+        return row;
+    }
+
+    private static Button CreateToolbarButton(string text, EventHandler clicked, string automationId)
+    {
+        var button = UiTheme.Button(text, clicked);
+        button.AutomationId = automationId;
+        button.FontSize = 12;
+        button.HeightRequest = 42;
+        button.MinimumHeightRequest = 42;
+        button.MinimumWidthRequest = 0;
+        button.Padding = new Thickness(3, 6);
+        button.CornerRadius = 10;
+        button.HorizontalOptions = LayoutOptions.Fill;
+        return button;
+    }
+
+    private void AddTool(Grid toolbar, InkCanvasTool tool, string text, int column)
+    {
+        var button = CreateToolbarButton(text, (_, _) => SelectTool(tool), $"Tool{tool}Button");
         _toolButtons[tool] = button;
-        toolbar.Add(button);
+        _toolLabels[tool] = text;
+        toolbar.Add(button, column);
     }
 
     private void SelectTool(InkCanvasTool tool)
@@ -167,11 +220,49 @@ public sealed class EditorPage : ContentPage
         _canvas.InkWidth = tool == InkCanvasTool.Highlighter ? _highlighterWidth : _penWidth;
         foreach (var pair in _toolButtons)
         {
-            pair.Value.BackgroundColor = pair.Key == tool ? UiTheme.AccentSoft : UiTheme.Surface;
-            pair.Value.TextColor = pair.Key == tool ? UiTheme.Accent : UiTheme.Text;
+            var selected = pair.Key == tool;
+            pair.Value.Text = selected ? $"{_toolLabels[pair.Key]} ✓" : _toolLabels[pair.Key];
+            pair.Value.BackgroundColor = selected ? UiTheme.AccentSoft : UiTheme.Surface;
+            pair.Value.TextColor = selected ? UiTheme.Accent : UiTheme.Text;
+            pair.Value.BorderColor = selected ? UiTheme.Accent : UiTheme.Border;
         }
+        UpdateToolSettingButtons();
     }
 
+    private void UpdateToolSettingButtons()
+    {
+        var width = _canvas.Tool == InkCanvasTool.Highlighter ? _highlighterWidth : _penWidth;
+        _widthButton.Text = $"粗细 {width:0.#}";
+        _colorButton.Text = "颜色 ●";
+        _colorButton.TextColor = Color.FromArgb(_color);
+        _colorButton.BorderColor = Color.FromArgb(_color);
+        UpdateFingerDrawingButton();
+    }
+
+    private void UpdateFingerDrawingButton()
+    {
+        var enabled = _canvas.FingerDrawingEnabled;
+        _fingerButton.Text = enabled ? "手指：开" : "手指：关";
+        _fingerButton.BackgroundColor = enabled ? UiTheme.AccentSoft : UiTheme.Surface;
+        _fingerButton.TextColor = enabled ? UiTheme.Accent : UiTheme.Text;
+        _fingerButton.BorderColor = enabled ? UiTheme.Accent : UiTheme.Border;
+        UpdatePageStatus();
+    }
+
+    private void UpdatePageStatus()
+    {
+        if (_page is null || _repository.Current is null) return;
+        var index = _repository.Current.Document.Pages.IndexOf(_page);
+        if (index < 0) return;
+        _pageStatus.Text = $"{index + 1}/{_repository.Current.Document.Pages.Count} 页 · {(_canvas.FingerDrawingEnabled ? "手写开" : "手写关")}";
+    }
+
+    private void ToggleFingerDrawing_Clicked(object? sender, EventArgs e)
+    {
+        _canvas.FingerDrawingEnabled = !_canvas.FingerDrawingEnabled;
+        Preferences.Default.Set("FingerDrawing", _canvas.FingerDrawingEnabled);
+        UpdateFingerDrawingButton();
+    }
     private void Canvas_InkChanged(object? sender, EventArgs e)
     {
         if (_page is null) return;
@@ -223,10 +314,23 @@ public sealed class EditorPage : ContentPage
 
     private async void More_Clicked(object? sender, EventArgs e)
     {
-        var choice = await DisplayActionSheetAsync("笔记本操作", "取消", null, "重命名当前页", "添加文字", "添加形状", "复制当前页", "删除当前页", "导出笔记本", "移到回收站");
+        var choice = await DisplayActionSheetAsync("笔记本操作", "取消", null, "纸张设置", "适合屏幕", "清空当前页墨迹", "重命名当前页", "添加文字", "添加形状", "复制当前页", "删除当前页", "导出笔记本", "移到回收站");
         if (_page is null || _repository.Current is null) return;
         switch (choice)
         {
+            case "纸张设置":
+                Template_Clicked(sender, e);
+                break;
+            case "适合屏幕":
+                _canvas.ResetViewport();
+                break;
+            case "清空当前页墨迹":
+                if (!_page.Ink.IsEmpty && await DisplayAlertAsync("清空墨迹", "确定清空当前页面的全部手写笔迹吗？页面对象不会被删除。", "清空", "取消"))
+                {
+                    _canvas.Clear();
+                    ScheduleSave();
+                }
+                break;
             case "重命名当前页":
                 var title = await DisplayPromptAsync("页面标题", "输入页面标题", initialValue: _page.Title, maxLength: 80);
                 if (title is not null) { _page.Title = title.Trim(); RefreshPageCards(); ScheduleSave(); }
@@ -316,8 +420,10 @@ public sealed class EditorPage : ContentPage
     private async void Color_Clicked(object? sender, EventArgs e)
     {
         var choice = await DisplayActionSheetAsync("墨迹颜色", "取消", null, "深灰", "蓝色", "红色", "绿色", "黄色");
+        if (choice is null or "取消") return;
         _color = choice switch { "蓝色" => "#3157D5", "红色" => "#D94A4A", "绿色" => "#208B67", "黄色" => "#F0B429", _ => "#1D2530" };
         _canvas.InkColor = _color;
+        UpdateToolSettingButtons();
     }
 
     private async void Width_Clicked(object? sender, EventArgs e)

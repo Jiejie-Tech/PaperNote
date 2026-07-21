@@ -26,6 +26,7 @@ public sealed class NativeInkCanvasView : View
     private double _inkWidth = 3.2;
     private bool _fingerDrawing;
     private PaperInkStroke? _activeStroke;
+    private bool _eraseUndoPushed;
     private bool _panning;
     private float _lastX;
     private float _lastY;
@@ -191,7 +192,7 @@ public sealed class NativeInkCanvasView : View
                 _lastX = x; _lastY = y;
                 if (erasing && shouldDraw)
                 {
-                    PushUndo();
+                    _eraseUndoPushed = false;
                     EraseAt(x, y);
                 }
                 else if (shouldDraw && _tool != InkCanvasTool.Pan && IsInsidePage(x, y))
@@ -213,7 +214,6 @@ public sealed class NativeInkCanvasView : View
                 }
                 return true;
             case MotionEventActions.Up:
-            case MotionEventActions.Cancel:
                 if (_activeStroke is not null)
                 {
                     AddPoint(e, x, y, e.Pressure);
@@ -221,6 +221,13 @@ public sealed class NativeInkCanvasView : View
                     InkChanged?.Invoke(this, EventArgs.Empty);
                     HistoryChanged?.Invoke(this, EventArgs.Empty);
                 }
+                _eraseUndoPushed = false;
+                _panning = false;
+                _lastPinchDistance = 0;
+                return true;
+            case MotionEventActions.Cancel:
+                CancelActiveStroke();
+                _eraseUndoPushed = false;
                 _panning = false;
                 _lastPinchDistance = 0;
                 return true;
@@ -230,7 +237,8 @@ public sealed class NativeInkCanvasView : View
 
     private bool HandlePinch(MotionEvent e)
     {
-        _activeStroke = null;
+        CancelActiveStroke();
+        _eraseUndoPushed = false;
         _panning = false;
         var dx = e.GetX(1) - e.GetX(0);
         var dy = e.GetY(1) - e.GetY(0);
@@ -314,13 +322,27 @@ public sealed class NativeInkCanvasView : View
         var x = (screenX - _offsetX) / scale;
         var y = (screenY - _offsetY) / scale;
         var radius = 18 / Math.Max(scale, 0.01f);
-        var removed = _document.Strokes.RemoveAll(stroke => stroke.Points.Any(point => Distance(point.X, point.Y, x, y) <= radius));
-        if (removed > 0)
+        var matches = _document.Strokes.Where(stroke => stroke.Points.Any(point => Distance(point.X, point.Y, x, y) <= radius)).ToArray();
+        if (matches.Length == 0) return;
+        if (!_eraseUndoPushed)
         {
-            Invalidate();
-            InkChanged?.Invoke(this, EventArgs.Empty);
-            HistoryChanged?.Invoke(this, EventArgs.Empty);
+            PushUndo();
+            _eraseUndoPushed = true;
         }
+        foreach (var stroke in matches) _document.Strokes.Remove(stroke);
+        Invalidate();
+        InkChanged?.Invoke(this, EventArgs.Empty);
+        HistoryChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void CancelActiveStroke()
+    {
+        if (_activeStroke is null) return;
+        _document.Strokes.Remove(_activeStroke);
+        _activeStroke = null;
+        if (_undo.Count > 0) _undo.Pop();
+        Invalidate();
+        HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void PushUndo()
