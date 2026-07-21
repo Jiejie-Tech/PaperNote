@@ -1,3 +1,4 @@
+# Builds the Windows release package. Use build-android.ps1 for the Android APK.
 [CmdletBinding()]
 param(
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$')]
@@ -46,7 +47,7 @@ Copy-Item -LiteralPath (Join-Path $Root 'legal\third-party') -Destination (Join-
 Copy-Item -LiteralPath (Join-Path $Root 'docs') -Destination (Join-Path $PublishDir 'docs') -Recurse
 
 $releaseReadme = @"
-PaperNote Desktop $Version ($Runtime)
+PaperNote for Windows $Version ($Runtime)
 
 1. Run PaperNote.Desktop.exe.
 2. The app stores notebooks locally and does not require an account.

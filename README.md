@@ -6,7 +6,7 @@
 
 面向 Windows 笔记本电脑、触控设备和 Android 手机/平板，支持手写、分页笔记、PDF 批注、跨设备文件传递与离线备份。
 
-[功能说明](docs/FEATURES.md) · [用户指南](docs/USER-GUIDE.md) · [Android 指南](docs/ANDROID.md) · [开发路线](ROADMAP.md)
+[功能说明](docs/FEATURES.md) · [用户指南](docs/USER-GUIDE.md) · [Android 指南](docs/ANDROID.md) · [发布指南](docs/RELEASE.md) · [开发路线](ROADMAP.md)
 
 </div>
 
@@ -69,7 +69,7 @@
 .\scripts\test.ps1 -SkipAndroidRuntime
 ```
 
-Android 工具链对非 ASCII 路径兼容性有限；脚本会使用 ASCII 构建目录。详见 [Android 构建指南](docs/BUILD-ANDROID.md)。
+Android 工具链对非 ASCII 路径兼容性有限；脚本会使用 ASCII 构建目录。详见 [Android 构建指南](docs/BUILD-ANDROID.md)。生成 Windows 与 Android 正式安装包时，请同时遵循 [统一发布指南](docs/RELEASE.md)。
 
 ## 安全与隐私
 

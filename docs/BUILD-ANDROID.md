@@ -94,3 +94,5 @@ dotnet workload repair
 - `bin`、`obj` 和本地构建缓存。
 
 正式发布前保存 APK 的 SHA-256，并确认 v1/v2/v3 签名验证通过。
+
+Windows 与 Android 同版本发布、覆盖升级和双托管平台核对流程见 [统一发布指南](RELEASE.md)。

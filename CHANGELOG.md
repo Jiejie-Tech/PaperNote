@@ -14,6 +14,7 @@
 - Android PDF 导入、批注和导出。
 - 签名 APK 构建脚本、ADB 后台运行测试和完整回归入口。
 - Android 使用、构建和数据格式文档。
+- Windows 与 Android 统一发布指南及完整第三方许可清单。
 
 ### 变更
 
@@ -21,6 +22,7 @@
 - Windows 版改用共享 Core，并同时维护 ISF 与 PaperInk。
 - 数据格式升级到版本 14。
 - 统一 Windows 与 Android 的笔记、备份和跨平台对象模型。
+- Android 安装包内嵌第三方声明、MAUI/Android 依赖许可与 Open Sans 字体许可。
 
 ### 修复
 
