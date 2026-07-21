@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
@@ -8,8 +8,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
-using PaperNote.Desktop.Models;
+using PaperNote.Core.Models;
 using PaperNote.Desktop.Services;
+using PaperNote.Core.Services;
 using PaperNote.Desktop.ViewModels;
 
 namespace PaperNote.Desktop;
@@ -478,9 +479,15 @@ public partial class MainWindow : Window
     {
         if (_currentNotebook is null || _currentPage is null) return;
         var inkData = PageThumbnailService.Serialize(InkSurface.Strokes);
-        if (!string.Equals(_currentPage.InkData, inkData, StringComparison.Ordinal))
+        var portableInk = WpfInkAdapter.ToPaperInk(InkSurface.Strokes);
+        var portableInkChanged = !string.Equals(
+            PaperNote.Core.Ink.PaperInkSerializer.Serialize(_currentPage.Ink),
+            PaperNote.Core.Ink.PaperInkSerializer.Serialize(portableInk),
+            StringComparison.Ordinal);
+        if (!string.Equals(_currentPage.InkData, inkData, StringComparison.Ordinal) || portableInkChanged)
         {
             _currentPage.InkData = inkData;
+            _currentPage.Ink = portableInk;
             _currentPage.ModifiedAt = DateTimeOffset.Now;
             InvalidatePageThumbnail(_currentPage.Id);
         }
@@ -499,7 +506,7 @@ public partial class MainWindow : Window
             _currentPage = page;
             UpdateCurrentPageMetadataControls(page);
             ApplyPageAppearance(page);
-            ReplaceStrokes(PageThumbnailService.Deserialize(page.InkData), false);
+            ReplaceStrokes(WpfInkAdapter.GetPageStrokes(page, migrateLegacyInk: true), false);
             LoadPageObjects(page);
             _history.Clear();
             UpdateHistoryButtons();

@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,8 +9,9 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using PaperNote.Desktop;
-using PaperNote.Desktop.Models;
+using PaperNote.Core.Models;
 using PaperNote.Desktop.Services;
+using PaperNote.Core.Services;
 
 internal static class Program
 {

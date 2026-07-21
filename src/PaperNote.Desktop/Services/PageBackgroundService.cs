@@ -1,6 +1,6 @@
-﻿using System.Windows.Media;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using PaperNote.Desktop.Models;
+using PaperNote.Core.Models;
 
 namespace PaperNote.Desktop.Services;
 

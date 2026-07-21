@@ -53,7 +53,7 @@ PaperNote Desktop $Version ($Runtime)
 3. Read PRIVACY.md before using real notes.
 4. Project and third-party license files are included in this package.
 
-This is an independent open-source project and is not an official port of any commercial note product.
+PaperNote is a local-first handwriting and document annotation application.
 "@
 Set-Content -LiteralPath (Join-Path $PublishDir 'README-Release.txt') -Value $releaseReadme -Encoding utf8
 if (Test-Path -LiteralPath $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }

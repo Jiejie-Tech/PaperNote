@@ -1,11 +1,12 @@
-﻿using System.IO;
+using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using Microsoft.Win32;
-using PaperNote.Desktop.Models;
+using PaperNote.Core.Models;
 using PaperNote.Desktop.Services;
+using PaperNote.Core.Services;
 
 namespace PaperNote.Desktop;
 

@@ -1,10 +1,11 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using Microsoft.Win32;
-using PaperNote.Desktop.Models;
+using PaperNote.Core.Models;
 using PaperNote.Desktop.Services;
+using PaperNote.Core.Services;
 
 namespace PaperNote.Desktop;
 
@@ -75,6 +76,7 @@ public partial class MainWindow
             CreatedAt = source.CreatedAt,
             ModifiedAt = source.ModifiedAt,
             InkData = source.InkData,
+            Ink = source.Ink.Clone(),
             PaperTemplate = source.PaperTemplate,
             PaperColor = source.PaperColor,
             BackgroundImageData = source.BackgroundImageData,

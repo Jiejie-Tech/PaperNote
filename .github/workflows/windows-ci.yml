@@ -15,10 +15,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Set up .NET 9
+      - name: Set up .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
-      - name: Run open-source audit and background tests
+          dotnet-version: 10.0.x
+      - name: Install Android workload
         shell: pwsh
-        run: .\scripts\test.ps1
+        run: dotnet workload install maui-android
+      - name: Run audit, Windows tests, and Android build
+        shell: pwsh
+        run: .\scripts\test.ps1 -SkipAndroidRuntime

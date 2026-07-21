@@ -1,4 +1,6 @@
-﻿namespace PaperNote.Desktop.Models;
+using PaperNote.Core.Ink;
+
+namespace PaperNote.Core.Models;
 
 public static class PaperPageDefaults
 {
@@ -14,7 +16,7 @@ public static class NotebookDefaults
 
 public sealed class NotebookDocument
 {
-    public int FormatVersion { get; set; } = 13;
+    public int FormatVersion { get; set; } = 14;
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = "未命名笔记本";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
@@ -52,7 +54,9 @@ public sealed class NotebookPage
     public int OutlineLevel { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
     public DateTimeOffset ModifiedAt { get; set; } = DateTimeOffset.Now;
+    // WPF ISF data retained for backwards compatibility. New clients use Ink.
     public string InkData { get; set; } = string.Empty;
+    public PaperInkDocument Ink { get; set; } = new();
     public string PaperTemplate { get; set; } = PaperPageDefaults.Template;
     public string PaperColor { get; set; } = PaperPageDefaults.Color;
     public string BackgroundImageData { get; set; } = string.Empty;
@@ -65,6 +69,33 @@ public sealed class NotebookPage
     public double BackgroundCropRight { get; set; }
     public double BackgroundCropBottom { get; set; }
     public List<PageObject> Objects { get; set; } = [];
+
+    public NotebookPage Clone(bool preserveIdentity = false)
+    {
+        return new NotebookPage
+        {
+            Id = preserveIdentity ? Id : Guid.NewGuid(),
+            Title = Title,
+            IsBookmarked = IsBookmarked,
+            OutlineLevel = OutlineLevel,
+            CreatedAt = preserveIdentity ? CreatedAt : DateTimeOffset.Now,
+            ModifiedAt = preserveIdentity ? ModifiedAt : DateTimeOffset.Now,
+            InkData = InkData,
+            Ink = Ink.Clone(),
+            PaperTemplate = PaperTemplate,
+            PaperColor = PaperColor,
+            BackgroundImageData = BackgroundImageData,
+            BackgroundSourceType = BackgroundSourceType,
+            BackgroundSourceName = BackgroundSourceName,
+            BackgroundPageNumber = BackgroundPageNumber,
+            BackgroundRotation = BackgroundRotation,
+            BackgroundCropLeft = BackgroundCropLeft,
+            BackgroundCropTop = BackgroundCropTop,
+            BackgroundCropRight = BackgroundCropRight,
+            BackgroundCropBottom = BackgroundCropBottom,
+            Objects = Objects.Select(item => item.Clone()).ToList()
+        };
+    }
 }
 
 public sealed class PaperPreset

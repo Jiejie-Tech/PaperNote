@@ -1,8 +1,9 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using PaperNote.Desktop.Services;
+using PaperNote.Core.Services;
 
 namespace PaperNote.Desktop;
 

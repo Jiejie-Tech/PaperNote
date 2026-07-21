@@ -1,9 +1,10 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using Microsoft.Win32;
 using PaperNote.Desktop.Services;
+using PaperNote.Core.Services;
 
 namespace PaperNote.Desktop;
 

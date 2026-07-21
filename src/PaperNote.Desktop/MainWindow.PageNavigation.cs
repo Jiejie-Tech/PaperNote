@@ -1,10 +1,11 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using PaperNote.Desktop.Models;
+using PaperNote.Core.Models;
 using PaperNote.Desktop.Services;
+using PaperNote.Core.Services;
 using PaperNote.Desktop.ViewModels;
 
 namespace PaperNote.Desktop;

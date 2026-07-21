@@ -1,121 +1,94 @@
 # PaperNote 平台宣传文案
 
-以下内容可以直接使用，发布时请把“项目地址”和“下载地址”替换为平台允许的链接形式。
+发布时请把项目地址、下载地址、版本号和设备截图替换为实际内容。
 
 ## B站
 
-### 推荐标题
+### 标题
 
-我做了一款不用账号和云服务的 Windows 手写笔记软件｜PaperNote
+我做了一款支持电脑、手机和平板的开源手写笔记｜PaperNote
 
 ### 简介
 
-PaperNote Desktop 是一款本地优先、免费开源的 Windows 墨迹笔记应用，适合触控屏、触控笔、数位板和鼠标使用。
+PaperNote 是一款本地优先、免费开源的手写笔记与 PDF 批注应用，目前支持 Windows 10/11 和 Android 6.0 以上设备。
 
-目前支持：
+当前功能包括：
 
-- 多种笔型、颜色、压感和平滑设置
-- 空白、点阵、横线、方格和图片纸张
-- 分页、书签、目录、页面总览和批量操作
-- PDF 导入、旋转、裁边、手写批注与重新导出
-- 文本、图片、形状和混合套索编辑
-- 自动保存、历史版本、整库备份与恢复
+- 钢笔、荧光笔、橡皮擦、撤销重做和触控笔压力输入
+- 空白、点阵、横线、方格等纸张模板
+- 页面新增、复制、删除、命名和快速跳转
+- PDF 导入、手写批注与重新导出
+- 文本、图片和七类常用形状
+- 搜索、回收站、自动保存、单笔记导入导出和整库备份恢复
+- Windows 与 Android 共用 `.papernote` 和 PaperInk 墨迹格式
 
-所有核心笔记数据默认保存在本机，不需要账号、订阅或云服务。目前提供 Windows 10/11 64 位便携版。
-
-这是第一个公开版本，暂不包含云同步、多人协作和手写 OCR。欢迎试用并反馈设备兼容性、使用体验和遇到的问题。
+所有核心笔记数据默认保存在设备本地，不需要账号。Android 客户端不申请网络权限。当前版本暂不包含账号云同步、多人协作和 OCR。
 
 项目源码：GitHub / Gitee 搜索 PaperNote
-下载位置：GitHub 或 Gitee 的 v1.0.0 发行版
+下载位置：项目 Releases 中的 Windows 包与 Android APK
 
-### 推荐标签
-
-Windows、开源软件、手写笔记、触控笔、数位板、PDF批注、WPF、效率工具
+推荐标签：开源软件、手写笔记、Android、Windows、触控笔、平板、PDF批注、效率工具
 
 ## V2EX「分享创造」
 
 ### 标题
 
-[分享创造] PaperNote：本地优先的 Windows 开源墨迹笔记应用
+[分享创造] PaperNote：支持 Windows 和 Android 的本地优先手写笔记应用
 
 ### 正文
 
-最近把 PaperNote Desktop 的第一个公开版本整理完成了。
+最近完成了 PaperNote 的 Android 客户端和跨平台数据层。
 
-它是一款面向 Windows 笔记本电脑、触控设备和数位板的本地墨迹笔记应用，核心思路是尽量把完整的笔记流程留在本机完成，不要求注册账号，也不依赖订阅和云服务。
+PaperNote 是一款本地优先的手写笔记与 PDF 批注应用。Windows 版适合触控电脑和数位板，Android 版适配手机和平板，并使用原生触控输入采集压力、倾角和触控笔橡皮端。两个平台可以通过 `.papernote` 文件和整库备份交换数据。
 
-目前已经支持手写和压感、多种纸张模板、分页和书签、目录与页面总览、PDF 导入批注、文本/图片/形状对象、历史版本、整库备份恢复和 PDF 导出。
+目前支持资料库、搜索、回收站、分页和模板、钢笔/荧光笔/橡皮擦、撤销重做、文本/图片/形状、PDF 导入批注与导出，以及本地自动保存。Android 默认单指移动、双指缩放，也可在设置中开启手指书写。
 
-技术上使用 .NET 9、WPF 和 Windows InkCanvas。项目里也有不会操控鼠标键盘、不会打开可见主窗口的后台界面测试，以及真实 PDF 和存储相关的冒烟测试。
+技术栈为 .NET 10、WPF、.NET MAUI 和 Android 原生 MotionEvent。仓库包含不操控用户鼠标的 Windows 隐藏界面测试，以及 ADB 驱动的 Android 安装、书写、页面、返回键和持久化测试。
 
-当前提供 Windows 10/11 64 位便携版，源码采用 MIT License。暂时没有云同步、多人协作和手写 OCR。
+当前没有账号云同步、多人协作和 OCR。希望获得不同触控笔设备、长笔记性能、大型 PDF 和首次使用体验方面的反馈。
 
-比较希望获得以下反馈：
-
-1. 不同触控笔和数位板的书写体验；
-2. 长笔记和高清 PDF 的性能；
-3. 第一次打开时是否容易理解；
-4. 哪些操作容易误触或找不到；
-5. 是否存在保存、关闭或导出异常。
-
-项目和下载地址：发布时粘贴 GitHub / Gitee 地址。
+项目与下载地址：发布时粘贴 GitHub / Gitee 地址。
 
 ## 知乎 / 掘金 / CSDN
 
-### 推荐标题
+### 标题
 
-从 Windows InkCanvas 到 PDF 批注：我如何完成 PaperNote Desktop 的第一个开源版本
+从 WPF 到 Android：PaperNote 如何共享笔记数据与跨平台墨迹
 
-### 文章提纲
+### 内容提纲
 
-1. 为什么选择本地优先，而不是先做账号和云同步；
-2. Windows 手写笔记的主要使用场景；
-3. WPF、InkCanvas 和本地 `.papernote` 文件的技术选择；
-4. 笔迹、对象、分页和 PDF 背景如何组合；
-5. 自动保存、历史版本和整库备份如何保护数据；
-6. 为什么专门做不操控鼠标的后台界面测试；
-7. v1.0.0 当前能力和明确限制；
-8. 下一阶段如何根据真实反馈改进。
+1. 为什么选择本地优先和文件交换；
+2. 从桌面单体到 `PaperNote.Core` 的拆分；
+3. ISF 与 PaperInk 双格式兼容；
+4. Android MotionEvent 的压力、倾角和橡皮端；
+5. 手机和平板响应式页面导航；
+6. 自动保存并发问题和返回键异常修复；
+7. 后台自动化测试与签名 APK 发布；
+8. 后续性能、可访问性和同步方向。
 
-### 开头示例
+## 小红书 / 即刻 / 朋友圈
 
-很多 Windows 笔记本已经带有触控屏和触控笔，但当我想找一款不要求登录、可以离线保存、同时支持手写和 PDF 批注的软件时，常常需要在功能、隐私和使用方式之间妥协。于是我开始开发 PaperNote Desktop，希望先把最核心的书写、分页、资料库、PDF 批注、备份和导出流程在本机完成。
+### 短版
 
-## 小众软件 / 软件推荐投稿
+PaperNote 现在支持 Windows 和 Android 了：触控笔书写、分页模板、PDF 批注、文本图片形状、搜索和备份都能离线使用。电脑与手机/平板可以直接传 `.papernote` 文件，不需要注册账号。源码和安装包已放到 GitHub / Gitee。
 
-### 软件名称
+### 更新版
 
-PaperNote Desktop
+PaperNote Android 1.0.0：
 
-### 一句话介绍
+- 手机和平板响应式界面
+- 原生触控笔压力书写
+- 单指平移、双指缩放
+- PDF 导入批注和导出
+- 与 Windows 交换笔记文件
+- 本地保存，无内置网络权限
 
-一款本地优先、无需账号、支持手写和 PDF 批注的 Windows 开源笔记应用。
+项目地址与 APK：发布时补充。
 
-### 推荐正文
+## 英文仓库简介
 
-PaperNote Desktop 面向 Windows 10/11 笔记本电脑、触控设备和数位板。软件提供圆珠笔、钢笔、画笔、铅笔和荧光笔等书写工具，支持压感、纸张模板、分页、书签、目录、页面总览、PDF 导入批注、图片和形状对象，以及 PDF 导出。
+Local-first handwriting and PDF annotation app for Windows and Android, built with .NET 10, WPF and .NET MAUI.
 
-笔记默认保存到本地文件，软件不要求账号，也不主动上传笔记内容。历史版本和整库备份功能可以帮助用户恢复旧内容或迁移资料库。
+## 推荐 Topics
 
-软件目前免费开源，采用 MIT License，提供 Windows 64 位便携版。当前版本不包含云同步、多人协作和手写 OCR。
-
-### 软件信息
-
-- 系统：Windows 10/11 64 位
-- 价格：免费
-- 许可证：MIT
-- 网络：核心功能无需联网
-- 安装方式：便携压缩包，解压后运行
-- 数据：默认保存在当前用户的文档目录
-
-## 小红书 / 抖音短文案
-
-Windows 触控笔和数位板不只能画画，也可以直接做课堂笔记和批注 PDF。PaperNote 支持多种笔型、纸张模板、分页、书签、PDF 导入和重新导出，核心数据默认保存在自己的电脑上，不需要登录和订阅。目前 Windows 版已经免费开源。
-
-## 朋友圈 / QQ群短文案
-
-PaperNote v1.0.0 发布了：一款本地优先的 Windows 开源墨迹笔记应用，支持触控笔/数位板、纸张模板、分页管理和 PDF 批注，不需要账号或云服务。现在提供 Windows 64 位便携版，欢迎试用，尤其想收集不同设备上的书写和稳定性反馈。
-
-## 英文短介绍
-
-PaperNote Desktop is a local-first, open-source handwriting and PDF annotation app for Windows. It supports pen input, drawing tablets, paper templates, page organization, PDF import and annotation, local backups, and PDF export. Core notebook data stays on your computer by default, with no account, subscription, or cloud service required.
+`android` `windows` `dotnet` `dotnet-maui` `wpf` `handwriting` `stylus` `pdf-annotation` `offline-first` `note-taking`

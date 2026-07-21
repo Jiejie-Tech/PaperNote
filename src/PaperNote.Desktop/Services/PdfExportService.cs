@@ -1,5 +1,5 @@
-﻿using System.IO;
-using PaperNote.Desktop.Models;
+using System.IO;
+using PaperNote.Core.Models;
 using SkiaSharp;
 
 namespace PaperNote.Desktop.Services;

@@ -1,7 +1,8 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using PaperNote.Desktop.Services;
+using PaperNote.Core.Services;
 
 namespace PaperNote.Desktop;
 

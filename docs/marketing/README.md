@@ -1,30 +1,32 @@
 # PaperNote 宣传发布包
 
-本目录包含公开宣传 PaperNote 时可直接复用的标题、简介、发布文案、视频脚本和素材清单。发布前请把版本号、下载地址和已知限制更新为实际状态。
+本目录提供可直接调整后发布的介绍、平台文案、视频脚本和检查清单。发布前请确认版本号、下载地址、截图和已知限制与实际版本一致。
 
 ## 统一定位
 
-**PaperNote 是一款本地优先、免费开源的 Windows 墨迹笔记应用。**
+**PaperNote 是一款本地优先、免费开源的手写笔记与 PDF 批注应用，支持 Windows 和 Android。**
 
-统一卖点：Windows、触控笔与数位板、PDF 批注、本地保存、无需账号、免费开源。
+统一卖点：触控笔书写、手机与平板、Windows 桌面、PDF 批注、本地保存、无需账号、免费开源、跨平台 `.papernote` 文件。
 
-对外文案只描述 PaperNote 自身能力，不使用竞品名称、比较式定位或“完全替代商业软件”等过度承诺。
+对外文案只陈述 PaperNote 已实现的能力和限制，不使用比较式定位、来源混淆或无法验证的绝对化承诺。
 
 ## 素材
 
 - 社交分享封面：`../brand/social-preview.png`
-- 资料库截图：`../screenshots/PaperNote资料库.png`
-- 编辑器截图：`../screenshots/PaperNote编辑器.png`
+- Windows 资料库截图：`../screenshots/PaperNote资料库.png`
+- Windows 编辑器截图：`../screenshots/PaperNote编辑器.png`
 - 横版宣传视频：`../../videos/papernote-promo/renders/papernote-promo.mp4`
 - README 演示 GIF：`../brand/papernote-demo.gif`
 
+发布 Android 版本时应补充真实手机和平板截图，不使用设计稿冒充实际界面。
+
 ## 推荐标题
 
-- PaperNote：本地优先的 Windows 开源墨迹笔记应用
-- 我做了一款不用账号和云服务的 Windows 手写笔记软件
-- 用 WPF 做了一个支持 PDF 批注的开源笔记应用
-- Windows 触控笔用户，可以试试这款本地笔记软件
+- PaperNote：支持 Windows 和 Android 的本地手写笔记应用
+- 我做了一款不用账号也能跨设备传笔记的开源应用
+- 手机、平板和电脑都能打开的本地手写笔记
+- PaperNote Android 版：触控笔书写、分页笔记和 PDF 批注
 
 ## 统一短介绍
 
-PaperNote Desktop 是一款面向 Windows 笔记本电脑、触控屏和数位板的开源墨迹笔记应用。它支持多笔型、纸张模板、分页管理、PDF 导入批注、页面搜索、备份与导出，所有核心笔记数据默认保存在本机，不需要账号、订阅或云服务。目前提供 Windows 64 位便携版，欢迎试用和反馈。
+PaperNote 是一款支持 Windows 与 Android 的本地优先手写笔记应用。它提供触控笔压力输入、钢笔和荧光笔、纸张模板、分页管理、PDF 导入批注、文本/图片/形状、搜索、回收站和整库备份。核心数据默认保存在设备本地，不要求账号，也不依赖内置云服务；可通过 `.papernote` 文件在电脑、手机和平板之间传递笔记。

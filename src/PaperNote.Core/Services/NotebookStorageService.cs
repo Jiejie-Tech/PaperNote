@@ -1,8 +1,9 @@
-﻿using System.IO;
+using System.IO;
 using System.Text.Json;
-using PaperNote.Desktop.Models;
+using PaperNote.Core.Models;
+using PaperNote.Core.Ink;
 
-namespace PaperNote.Desktop.Services;
+namespace PaperNote.Core.Services;
 
 public sealed class NotebookStorageService
 {
@@ -73,7 +74,7 @@ public sealed class NotebookStorageService
     {
         EnsurePathIsInNotebookDirectory(filePath, allowMissing: true);
         NormalizeDocument(document);
-        document.FormatVersion = Math.Max(document.FormatVersion, 13);
+        document.FormatVersion = Math.Max(document.FormatVersion, 14);
         document.ModifiedAt = DateTimeOffset.Now;
         var bytes = JsonSerializer.SerializeToUtf8Bytes(document, _jsonOptions);
         var directory = Path.GetDirectoryName(filePath)
@@ -180,6 +181,8 @@ public sealed class NotebookStorageService
             page.PaperTemplate = NormalizePaperTemplate(page.PaperTemplate);
             page.PaperColor = string.IsNullOrWhiteSpace(page.PaperColor) ? PaperPageDefaults.Color : page.PaperColor;
             page.InkData ??= string.Empty;
+            page.Ink ??= new PaperInkDocument();
+            PaperInkSerializer.Normalize(page.Ink);
             page.BackgroundImageData ??= string.Empty;
             page.BackgroundSourceType = NormalizeBackgroundSourceType(page.BackgroundSourceType, page.BackgroundImageData);
             page.BackgroundSourceName = page.BackgroundSourceType is "PDF" or "Image" && !string.IsNullOrWhiteSpace(page.BackgroundSourceName) ? page.BackgroundSourceName.Trim() : string.Empty;

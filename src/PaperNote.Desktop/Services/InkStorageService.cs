@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows.Ink;
 
 namespace PaperNote.Desktop.Services;

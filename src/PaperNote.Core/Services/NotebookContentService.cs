@@ -1,7 +1,7 @@
-﻿using System.Text;
-using PaperNote.Desktop.Models;
+using System.Text;
+using PaperNote.Core.Models;
 
-namespace PaperNote.Desktop.Services;
+namespace PaperNote.Core.Services;
 
 public static class NotebookContentService
 {

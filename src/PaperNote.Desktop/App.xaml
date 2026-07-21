@@ -1,4 +1,4 @@
-﻿<Application x:Class="PaperNote.Desktop.App"
+<Application x:Class="PaperNote.Desktop.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:PaperNote.Desktop"

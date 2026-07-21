@@ -1,4 +1,5 @@
-﻿using System.Windows;
+using PaperNote.Core.Models;
+using System.Windows;
 using System.Windows.Controls;
 
 namespace PaperNote.Desktop;
@@ -93,7 +94,7 @@ public partial class MainWindow
         return linked is not null && OpenPageObjectLink(linked);
     }
 
-    private bool OpenPageObjectLink(Models.PageObject pageObject)
+    private bool OpenPageObjectLink(PageObject pageObject)
     {
         if (_currentNotebook is null || !pageObject.LinkTargetPageId.HasValue) return false;
         var index = _currentNotebook.Pages.FindIndex(page => page.Id == pageObject.LinkTargetPageId.Value);

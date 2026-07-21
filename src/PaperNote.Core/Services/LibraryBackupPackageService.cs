@@ -1,9 +1,9 @@
-﻿using System.IO;
+using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
-using PaperNote.Desktop.Models;
+using PaperNote.Core.Models;
 
-namespace PaperNote.Desktop.Services;
+namespace PaperNote.Core.Services;
 
 public sealed class LibraryBackupManifest
 {

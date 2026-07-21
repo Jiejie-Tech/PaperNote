@@ -1,7 +1,7 @@
-﻿using System.IO;
+using System.IO;
 using System.Text.Json;
 
-namespace PaperNote.Desktop.Services;
+namespace PaperNote.Core.Services;
 
 public sealed class WorkspaceNotebookTab
 {

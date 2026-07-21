@@ -1,11 +1,13 @@
-﻿using System.IO;
+using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Windows.Ink;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using PaperNote.Desktop.Models;
+using PaperNote.Core.Ink;
+using PaperNote.Core.Models;
+using PaperNote.Core.Services;
 using PaperNote.Desktop.Services;
 using SkiaSharp;
 
@@ -63,6 +65,22 @@ internal static class Program
                 new StylusPoint(320, 80)
             })
         });
+        var legacyStrokes = PageThumbnailService.Deserialize(sampleInkData);
+        legacyStrokes[0].DrawingAttributes.Color = Color.FromRgb(49, 87, 213);
+        legacyStrokes[0].DrawingAttributes.Width = 5;
+        legacyStrokes[0].DrawingAttributes.Height = 5;
+        var portableInk = WpfInkAdapter.ToPaperInk(legacyStrokes);
+        Assert(portableInk.Strokes.Count == 1 && portableInk.Strokes[0].Points.Count == 3, "WPF ISF should convert to PaperInk");
+        Assert(portableInk.Strokes[0].Color == "#3157D5" && portableInk.Strokes[0].Width == 5, "WPF ink style should survive PaperInk conversion");
+        var restoredWpf = WpfInkAdapter.ToStrokeCollection(portableInk);
+        Assert(restoredWpf.Count == 1 && restoredWpf[0].StylusPoints.Count == 3, "PaperInk should convert back to WPF strokes");
+        Assert(restoredWpf[0].DrawingAttributes.Color.R == 49 && restoredWpf[0].DrawingAttributes.Width == 5, "PaperInk style should convert back to WPF");
+        var portableOnlyPage = new NotebookPage { Ink = portableInk.Clone(), InkData = string.Empty };
+        Assert(WpfInkAdapter.GetPageStrokes(portableOnlyPage).Count == 1, "Windows should read Android PaperInk");
+        Assert(PageThumbnailService.CreatePageBitmap(portableOnlyPage, 150, 212) is RenderTargetBitmap, "PaperInk-only pages should render Windows thumbnails");
+        var legacyMigrationPage = new NotebookPage { InkData = sampleInkData };
+        Assert(WpfInkAdapter.GetPageStrokes(legacyMigrationPage, migrateLegacyInk: true).Count == 1 && !legacyMigrationPage.Ink.IsEmpty, "Legacy ISF should migrate to PaperInk when opened on Windows");
+
         var legacyDocument = new
         {
             FormatVersion = 1,
@@ -220,7 +238,7 @@ internal static class Program
             await testService.SaveAsync(document, tempPath);
 
             var loaded = await testService.LoadAsync(tempPath);
-            Assert(loaded.FormatVersion == 13, "Format version should be 13.");
+            Assert(loaded.FormatVersion == 14, "Format version should be 14.");
             Assert(loaded.LastOpenedAt == document.LastOpenedAt, "最近打开时间应往返保持。");
             Assert(loaded.FolderName == "课程" && loaded.CoverStyle == "Purple", "文件夹与封面应往返保持");
             Assert(!loaded.IsInTrash && loaded.TrashedAt is null, "新笔记本默认不在回收站");
@@ -323,6 +341,7 @@ internal static class Program
                 Title = source.Title,
                 IsBookmarked = source.IsBookmarked,
                 InkData = source.InkData,
+                Ink = source.Ink.Clone(),
                 PaperTemplate = source.PaperTemplate,
                 PaperColor = source.PaperColor,
                 BackgroundImageData = source.BackgroundImageData,

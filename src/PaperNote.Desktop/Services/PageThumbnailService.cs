@@ -1,10 +1,10 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Ink;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using PaperNote.Desktop.Models;
+using PaperNote.Core.Models;
 
 namespace PaperNote.Desktop.Services;
 
@@ -49,7 +49,7 @@ public static class PageThumbnailService
             throw new ArgumentOutOfRangeException(nameof(pixelWidth), "页面输出尺寸超出允许范围。");
 
         return RenderBitmap(
-            Deserialize(page.InkData),
+            WpfInkAdapter.GetPageStrokes(page),
             page.PaperTemplate,
             page.PaperColor,
             page.Objects,
