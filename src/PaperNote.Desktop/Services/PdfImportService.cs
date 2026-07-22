@@ -1,23 +1,24 @@
-using System.Globalization;
 using System.IO;
+using PaperNote.Core.Services;
 using PDFtoImage;
 using SkiaSharp;
 
 namespace PaperNote.Desktop.Services;
 
-public sealed record ImportedPdfPage(int PageNumber, string ImageData);
+public sealed record ImportedPdfPage(int PageNumber, string ImageData, bool FromCache = false);
 
 public static class PdfImportService
 {
     public const long MaximumFileSizeBytes = 200L * 1024 * 1024;
-    public const int MaximumPageCount = 300;
+    public const int MaximumPageCount = PdfPageRangeService.MaximumImportPageCount;
 
     public static int GetPageCount(string filePath)
     {
-        var pdfBytes = ReadAndValidatePdf(filePath);
+        ValidatePdf(filePath);
         try
         {
-            var pageCount = Conversion.GetPageCount(pdfBytes, password: null);
+            using var stream = File.OpenRead(filePath);
+            var pageCount = Conversion.GetPageCount(stream, leaveOpen: false, password: null);
             if (pageCount <= 0) throw new InvalidDataException("PDF 中没有可导入的页面。");
             return pageCount;
         }
@@ -28,57 +29,13 @@ public static class PdfImportService
     }
 
     public static IReadOnlyList<int> ParsePageSelection(string? selection, int pageCount)
-    {
-        if (pageCount <= 0) throw new ArgumentOutOfRangeException(nameof(pageCount));
-        var normalized = (selection ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(normalized) || normalized.Equals("全部", StringComparison.OrdinalIgnoreCase) || normalized.Equals("all", StringComparison.OrdinalIgnoreCase))
-        {
-            if (pageCount > MaximumPageCount) throw new InvalidDataException($"一次最多导入 {MaximumPageCount} 页，请输入页码范围。");
-            return Enumerable.Range(1, pageCount).ToArray();
-        }
+        => PdfPageRangeService.Parse(selection, pageCount, MaximumPageCount);
 
-        normalized = normalized.Replace('，', ',').Replace('；', ',').Replace(';', ',');
-        var pages = new SortedSet<int>();
-        foreach (var rawPart in normalized.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var part = rawPart.Replace(" ", string.Empty);
-            var dashIndex = part.IndexOf('-');
-            if (dashIndex < 0)
-            {
-                if (!int.TryParse(part, NumberStyles.None, CultureInfo.InvariantCulture, out var pageNumber))
-                    throw new InvalidDataException($"无法识别页码“{rawPart}”。");
-                AddPage(pageNumber);
-                continue;
-            }
-
-            if (part.IndexOf('-', dashIndex + 1) >= 0 ||
-                !int.TryParse(part[..dashIndex], NumberStyles.None, CultureInfo.InvariantCulture, out var start) ||
-                !int.TryParse(part[(dashIndex + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var end) ||
-                start > end)
-            {
-                throw new InvalidDataException($"无法识别页码范围“{rawPart}”。");
-            }
-            for (var pageNumber = start; pageNumber <= end; pageNumber++) AddPage(pageNumber);
-        }
-
-        if (pages.Count == 0) throw new InvalidDataException("请至少选择一页 PDF。");
-        return pages.ToArray();
-
-        void AddPage(int pageNumber)
-        {
-            if (pageNumber < 1 || pageNumber > pageCount) throw new InvalidDataException($"页码 {pageNumber} 超出范围，当前 PDF 共 {pageCount} 页。");
-            pages.Add(pageNumber);
-            if (pages.Count > MaximumPageCount) throw new InvalidDataException($"一次最多导入 {MaximumPageCount} 页。");
-        }
-    }
-
-    public static IReadOnlyList<ImportedPdfPage> Import(
-        string filePath,
-        int targetWidth = 840,
-        int targetHeight = 1188)
+    public static IReadOnlyList<ImportedPdfPage> Import(string filePath, int targetWidth = 840, int targetHeight = 1188)
     {
         var pageCount = GetPageCount(filePath);
-        if (pageCount > MaximumPageCount) throw new InvalidDataException($"这个 PDF 共 {pageCount} 页，一次最多导入 {MaximumPageCount} 页，请选择页码范围。");
+        if (pageCount > MaximumPageCount)
+            throw new InvalidDataException($"这个 PDF 共 {pageCount} 页，一次最多导入 {MaximumPageCount} 页，请选择页码范围。");
         return Import(filePath, Enumerable.Range(1, pageCount).ToArray(), targetWidth, targetHeight);
     }
 
@@ -87,17 +44,40 @@ public static class PdfImportService
         IReadOnlyList<int> pageNumbers,
         int targetWidth = 840,
         int targetHeight = 1188)
+        => ImportAsync(filePath, pageNumbers, targetWidth, targetHeight).GetAwaiter().GetResult();
+
+    public static async Task<IReadOnlyList<ImportedPdfPage>> ImportAsync(
+        string filePath,
+        IReadOnlyList<int> pageNumbers,
+        int targetWidth = 840,
+        int targetHeight = 1188,
+        string? cacheDirectory = null,
+        IProgress<PdfImportProgress>? progress = null,
+        CancellationToken cancellationToken = default)
     {
+        ValidatePdf(filePath);
         if (targetWidth <= 0 || targetHeight <= 0) throw new ArgumentOutOfRangeException(nameof(targetWidth), "页面尺寸必须大于零。");
         if (pageNumbers.Count == 0) throw new ArgumentException("请至少选择一页 PDF。", nameof(pageNumbers));
         if (pageNumbers.Count > MaximumPageCount) throw new InvalidDataException($"一次最多导入 {MaximumPageCount} 页 PDF。");
 
-        var pdfBytes = ReadAndValidatePdf(filePath);
+        var pageCount = await Task.Run(() => GetPageCount(filePath), cancellationToken);
+        var requestedPages = pageNumbers.Distinct().OrderBy(page => page).ToArray();
+        if (requestedPages.Any(page => page < 1 || page > pageCount))
+            throw new InvalidDataException($"导入页码必须在 1 至 {pageCount} 之间。");
+
+        var cache = new PdfImportCacheService(cacheDirectory ?? GetDefaultCacheDirectory());
+        PdfImportJobManifest? job = null;
         try
         {
-            var pageCount = Conversion.GetPageCount(pdfBytes, password: null);
-            var requestedPages = pageNumbers.Distinct().OrderBy(page => page).ToArray();
-            if (requestedPages.Any(page => page < 1 || page > pageCount)) throw new InvalidDataException($"导入页码必须在 1 至 {pageCount} 之间。");
+            job = await cache.PrepareAsync(
+                filePath,
+                Path.GetFileName(filePath),
+                requestedPages,
+                pageCount,
+                targetWidth,
+                targetHeight,
+                progress,
+                cancellationToken);
 
             var options = new RenderOptions
             {
@@ -110,34 +90,74 @@ public static class PdfImportService
             };
 
             var result = new List<ImportedPdfPage>(requestedPages.Length);
-            var renderedPages = Conversion.ToImages(pdfBytes, requestedPages.Select(page => page - 1), password: null, options);
-            using var enumerator = renderedPages.GetEnumerator();
+            var completed = 0;
+            using var pdfStream = new FileStream(cache.GetSourcePath(job), FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, FileOptions.RandomAccess);
             foreach (var pageNumber in requestedPages)
             {
-                if (!enumerator.MoveNext()) throw new InvalidDataException("PDF 页面渲染不完整，请重新导入。");
-                using var renderedPage = enumerator.Current;
-                using var fitted = FitToPage(renderedPage, targetWidth, targetHeight);
-                using var encoded = fitted.Encode(SKEncodedImageFormat.Png, 100);
-                result.Add(new ImportedPdfPage(pageNumber, Convert.ToBase64String(encoded.ToArray())));
+                cancellationToken.ThrowIfCancellationRequested();
+                byte[] imageBytes;
+                var fromCache = cache.TryReadPage(job, pageNumber, out imageBytes);
+                if (!fromCache)
+                {
+                    progress?.Report(new PdfImportProgress("渲染", completed, requestedPages.Length, pageNumber, false, $"正在渲染第 {pageNumber} 页…"));
+                    imageBytes = await Task.Run(() => RenderPage(pdfStream, pageNumber, targetWidth, targetHeight, options), cancellationToken);
+                    await cache.SavePageAsync(job, pageNumber, imageBytes, ".jpg", cancellationToken);
+                }
+
+                result.Add(new ImportedPdfPage(pageNumber, Convert.ToBase64String(imageBytes), fromCache));
+                completed++;
+                progress?.Report(new PdfImportProgress(
+                    fromCache ? "缓存" : "渲染",
+                    completed,
+                    requestedPages.Length,
+                    pageNumber,
+                    fromCache,
+                    fromCache ? $"已从缓存恢复第 {pageNumber} 页" : $"已完成第 {pageNumber} 页"));
             }
 
-            if (enumerator.MoveNext()) enumerator.Current.Dispose();
+            await cache.MarkCompletedAsync(job, cancellationToken);
             return result;
+        }
+        catch (OperationCanceledException)
+        {
+            if (job is not null) await cache.MarkCancelledAsync(job, CancellationToken.None);
+            throw;
         }
         catch (Exception exception) when (exception is not ArgumentException and not FileNotFoundException and not InvalidDataException)
         {
-            throw new InvalidDataException("无法读取这个 PDF，文件可能已损坏、受密码保护或格式不受支持。", exception);
+            if (job is not null) await cache.MarkFailedAsync(job, exception, CancellationToken.None);
+            throw new InvalidDataException("无法读取这个 PDF，文件可能已损坏、受密码保护或格式不受支持。已完成页面会保留供下次续接。", exception);
+        }
+        catch (Exception exception)
+        {
+            if (job is not null) await cache.MarkFailedAsync(job, exception, CancellationToken.None);
+            throw;
         }
     }
 
-    private static byte[] ReadAndValidatePdf(string filePath)
+    public static string GetDefaultCacheDirectory()
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PaperNote", "PdfImportCache");
+
+    private static byte[] RenderPage(FileStream pdfStream, int pageNumber, int targetWidth, int targetHeight, RenderOptions options)
+    {
+        lock (pdfStream)
+        {
+            using var renderedPage = Conversion.ToImage(pdfStream, pageNumber - 1, leaveOpen: true, password: null, options);
+            using var fitted = FitToPage(renderedPage, targetWidth, targetHeight);
+            using var encoded = fitted.Encode(SKEncodedImageFormat.Jpeg, 88)
+                ?? throw new InvalidDataException($"第 {pageNumber} 页图像编码失败。");
+            return encoded.ToArray();
+        }
+    }
+
+    private static void ValidatePdf(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("请选择 PDF 文件。", nameof(filePath));
         if (!File.Exists(filePath)) throw new FileNotFoundException("找不到要导入的 PDF 文件。", filePath);
         if (!string.Equals(Path.GetExtension(filePath), ".pdf", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("只能导入 PDF 文件。");
         var fileInfo = new FileInfo(filePath);
         if (fileInfo.Length > MaximumFileSizeBytes) throw new InvalidDataException("PDF 文件不能超过 200 MB。");
-        return File.ReadAllBytes(filePath);
+        if (fileInfo.Length == 0) throw new InvalidDataException("PDF 文件为空。");
     }
 
     private static SKBitmap FitToPage(SKBitmap source, int targetWidth, int targetHeight)

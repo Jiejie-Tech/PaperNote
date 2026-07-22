@@ -31,24 +31,74 @@ internal static class Program
         AssertThrows<InvalidDataException>(() => PdfImportService.ParsePageSelection("4", 3), "超出 PDF 总页数的页码应被拒绝。");
 
         var pdfTestPath = Path.Combine(Path.GetTempPath(), $"papernote-pdf-import-{Guid.NewGuid():N}.pdf");
+        var pdfCachePath = Path.Combine(Path.GetTempPath(), $"papernote-pdf-cache-{Guid.NewGuid():N}");
+        var pdfResumeCachePath = Path.Combine(Path.GetTempPath(), $"papernote-pdf-resume-{Guid.NewGuid():N}");
         IReadOnlyList<ImportedPdfPage> importedPdfPages;
         try
         {
             CreateTestPdf(pdfTestPath);
             Assert(PdfImportService.GetPageCount(pdfTestPath) == 3, "PDF page count should be read before range selection.");
-            importedPdfPages = PdfImportService.Import(pdfTestPath);
+
+            var firstProgress = new RecordingPdfProgress();
+            importedPdfPages = await PdfImportService.ImportAsync(
+                pdfTestPath,
+                new[] { 1, 2, 3 },
+                cacheDirectory: pdfCachePath,
+                progress: firstProgress);
             Assert(importedPdfPages.Count == 3, "PDF import should return all three pages.");
             Assert(importedPdfPages.Select(item => item.PageNumber).SequenceEqual(new[] { 1, 2, 3 }), "PDF import page numbers are incorrect.");
-            Assert(importedPdfPages.All(item => PageThumbnailService.DecodeImageData(item.ImageData) is BitmapSource { PixelWidth: 840, PixelHeight: 1188 }), "Imported PDF pages should be self-contained 840 x 1188 PNG backgrounds.");
-            var selectedPdfPages = PdfImportService.Import(pdfTestPath, new[] { 2, 3 });
+            Assert(importedPdfPages.All(item => PageThumbnailService.DecodeImageData(item.ImageData) is BitmapSource { PixelWidth: 840, PixelHeight: 1188 }), "Imported PDF pages should be self-contained 840 x 1188 image backgrounds.");
+            Assert(firstProgress.Items.Count > 0 && firstProgress.Items[^1].Fraction == 1, "PDF import progress should finish at 100 percent.");
+
+            var cachedProgress = new RecordingPdfProgress();
+            var cachedPdfPages = await PdfImportService.ImportAsync(
+                pdfTestPath,
+                new[] { 1, 2, 3 },
+                cacheDirectory: pdfCachePath,
+                progress: cachedProgress);
+            Assert(cachedPdfPages.All(item => item.FromCache), "Repeating the same PDF import should restore every rendered page from cache.");
+            Assert(cachedProgress.Items.Count(item => item.FromCache && item.CompletedPages > 0) == 3, "Cache-hit progress should be reported for every restored page.");
+
+            var selectedPdfPages = await PdfImportService.ImportAsync(pdfTestPath, new[] { 2, 3 }, cacheDirectory: pdfCachePath);
             Assert(selectedPdfPages.Select(item => item.PageNumber).SequenceEqual(new[] { 2, 3 }), "Selected PDF import should preserve requested page numbers.");
             Assert(selectedPdfPages[0].ImageData == importedPdfPages[1].ImageData && selectedPdfPages[1].ImageData == importedPdfPages[2].ImageData, "Selected PDF rendering should use the correct zero-based source page indexes.");
+
+            using var cancellation = new CancellationTokenSource();
+            var cancelProgress = new RecordingPdfProgress(item =>
+            {
+                if (item.CompletedPages == 1) cancellation.Cancel();
+            });
+            var cancelled = false;
+            try
+            {
+                await PdfImportService.ImportAsync(
+                    pdfTestPath,
+                    new[] { 1, 2, 3 },
+                    cacheDirectory: pdfResumeCachePath,
+                    progress: cancelProgress,
+                    cancellationToken: cancellation.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
+            Assert(cancelled, "PDF import should support cancellation after a completed page.");
+            Assert(!Directory.EnumerateFiles(pdfResumeCachePath, "*.tmp", SearchOption.AllDirectories).Any(), "Cancelled PDF import should not leave temporary files.");
+
+            var resumedPdfPages = await PdfImportService.ImportAsync(
+                pdfTestPath,
+                new[] { 1, 2, 3 },
+                cacheDirectory: pdfResumeCachePath);
+            Assert(resumedPdfPages.Count == 3 && resumedPdfPages[0].FromCache, "Restarting a cancelled PDF import should reuse the completed page and finish the job.");
         }
         finally
         {
             if (File.Exists(pdfTestPath)) File.Delete(pdfTestPath);
+            if (Directory.Exists(pdfCachePath)) Directory.Delete(pdfCachePath, recursive: true);
+            if (Directory.Exists(pdfResumeCachePath)) Directory.Delete(pdfResumeCachePath, recursive: true);
         }
         Assert(!File.Exists(pdfTestPath), "PDF import test should not leave a source file behind.");
+        Assert(!Directory.Exists(pdfCachePath) && !Directory.Exists(pdfResumeCachePath), "PDF import tests should clean their isolated cache directories.");
 
         var storageTestRoot = Path.Combine(Path.GetTempPath(), $"papernote-storage-smoke-{Guid.NewGuid():N}");
         var testService = new NotebookStorageService(Path.Combine(storageTestRoot, "Notebooks"), Path.Combine(storageTestRoot, "Backups"));
@@ -558,6 +608,17 @@ internal static class Program
             document.EndPage();
         }
         document.Close();
+    }
+
+    private sealed class RecordingPdfProgress(Action<PdfImportProgress>? onReport = null) : IProgress<PdfImportProgress>
+    {
+        public List<PdfImportProgress> Items { get; } = [];
+
+        public void Report(PdfImportProgress value)
+        {
+            Items.Add(value);
+            onReport?.Invoke(value);
+        }
     }
 
     private static void AssertThrows<TException>(Action action, string message) where TException : Exception

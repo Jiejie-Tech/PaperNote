@@ -4,6 +4,7 @@ using Android.OS;
 using Java.IO;
 using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
+using PaperNote.Core.Services;
 using PaperNote.Mobile.Platforms.Android;
 using AColor = Android.Graphics.Color;
 using ARectF = Android.Graphics.RectF;
@@ -13,53 +14,183 @@ using File = System.IO.File;
 
 namespace PaperNote.Mobile.Services;
 
+public sealed class PreparedAndroidPdfImport : IAsyncDisposable
+{
+    public required string StagingPath { get; init; }
+    public required string SourceName { get; init; }
+    public required int PageCount { get; init; }
+    public required long Length { get; init; }
+
+    public ValueTask DisposeAsync()
+    {
+        try { if (File.Exists(StagingPath)) File.Delete(StagingPath); } catch { }
+        return ValueTask.CompletedTask;
+    }
+}
+
+public sealed record AndroidPdfImportPage(NotebookPage Page, bool FromCache);
+
 public sealed class AndroidPdfService
 {
-    public async Task<IReadOnlyList<NotebookPage>> ImportAsync(FileResult file, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
-    {
-        var cachePath = IOPath.Combine(FileSystem.CacheDirectory, $"pdf-import-{Guid.NewGuid():N}.pdf");
-        await using (var source = await file.OpenReadAsync())
-        await using (var target = File.Create(cachePath))
-            await source.CopyToAsync(target, cancellationToken);
+    public const long MaximumFileSizeBytes = 200L * 1024 * 1024;
 
+    public async Task<PreparedAndroidPdfImport> PrepareImportAsync(
+        FileResult file,
+        IProgress<PdfImportProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        var cachePath = IOPath.Combine(FileSystem.CacheDirectory, $"pdf-stage-{Guid.NewGuid():N}.pdf");
+        long copied = 0;
         try
         {
+            await using (var source = await file.OpenReadAsync())
+            await using (var target = new FileStream(cachePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, true))
+            {
+                var buffer = new byte[1024 * 1024];
+                int read;
+                while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
+                {
+                    copied += read;
+                    if (copied > MaximumFileSizeBytes) throw new InvalidDataException("PDF 文件不能超过 200 MB。");
+                    await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    var total = source.CanSeek ? source.Length : 0;
+                    var percent = total <= 0 ? 0 : Math.Clamp(copied / (double)total, 0, 1);
+                    progress?.Report(new PdfImportProgress("复制", (int)Math.Round(percent * 100), 100, 0, false, $"正在读取 PDF… {Math.Round(copied / 1024d / 1024d, 1)} MB"));
+                }
+                await target.FlushAsync(cancellationToken);
+            }
+            if (copied == 0) throw new InvalidDataException("PDF 文件为空。");
+
             using var descriptor = ParcelFileDescriptor.Open(new Java.IO.File(cachePath), ParcelFileMode.ReadOnly)
                 ?? throw new InvalidOperationException("无法读取 PDF 文件。");
             using var renderer = new PdfRenderer(descriptor);
-            var pages = new List<NotebookPage>(renderer.PageCount);
-            for (var index = 0; index < renderer.PageCount; index++)
+            if (renderer.PageCount <= 0) throw new InvalidDataException("PDF 中没有可导入的页面。");
+            return new PreparedAndroidPdfImport
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                using var page = renderer.OpenPage(index);
-                const int outputWidth = 1260;
-                var outputHeight = Math.Max(1, (int)Math.Round(outputWidth * page.Height / (double)page.Width));
-                using var bitmap = Bitmap.CreateBitmap(outputWidth, outputHeight, Bitmap.Config.Argb8888!)
-                    ?? throw new InvalidOperationException("无法创建 PDF 页面图像。");
-                bitmap.EraseColor(AColor.White);
-                page.Render(bitmap, null, null, PdfRenderMode.ForDisplay);
-                using var stream = new MemoryStream();
-                bitmap.Compress(Bitmap.CompressFormat.Png!, 92, stream);
-                pages.Add(new NotebookPage
-                {
-                    Title = $"PDF 第 {index + 1} 页",
-                    PaperTemplate = "Blank",
-                    PaperColor = "#FFFFFF",
-                    BackgroundImageData = Convert.ToBase64String(stream.ToArray()),
-                    BackgroundSourceType = "PDF",
-                    BackgroundSourceName = file.FileName,
-                    BackgroundPageNumber = index + 1
-                });
-                progress?.Report((index + 1d) / renderer.PageCount);
-            }
-            return pages;
+                StagingPath = cachePath,
+                SourceName = file.FileName,
+                PageCount = renderer.PageCount,
+                Length = copied
+            };
         }
-        finally
+        catch
         {
-            if (File.Exists(cachePath)) File.Delete(cachePath);
+            try { if (File.Exists(cachePath)) File.Delete(cachePath); } catch { }
+            throw;
         }
     }
 
+    public async Task<IReadOnlyList<NotebookPage>> ImportAsync(FileResult file, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    {
+        await using var prepared = await PrepareImportAsync(file, cancellationToken: cancellationToken);
+        var pages = PdfPageRangeService.Parse("all", prepared.PageCount);
+        IProgress<PdfImportProgress>? detailed = progress is null
+            ? null
+            : new Progress<PdfImportProgress>(item => progress.Report(item.Fraction));
+        var imported = await ImportAsync(prepared, pages, detailed, cancellationToken);
+        return imported.Select(item => item.Page).ToArray();
+    }
+
+    public async Task<IReadOnlyList<AndroidPdfImportPage>> ImportAsync(
+        PreparedAndroidPdfImport prepared,
+        IReadOnlyList<int> pageNumbers,
+        IProgress<PdfImportProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(prepared);
+        var requestedPages = pageNumbers.Distinct().OrderBy(page => page).ToArray();
+        if (requestedPages.Length == 0 || requestedPages.Any(page => page < 1 || page > prepared.PageCount))
+            throw new InvalidDataException("PDF 页码范围无效。");
+        if (requestedPages.Length > PdfPageRangeService.MaximumImportPageCount)
+            throw new InvalidDataException($"一次最多导入 {PdfPageRangeService.MaximumImportPageCount} 页。");
+
+        var cache = new PdfImportCacheService(IOPath.Combine(FileSystem.CacheDirectory, "PdfImportCache"));
+        PdfImportJobManifest? job = null;
+        try
+        {
+            job = await cache.PrepareAsync(
+                prepared.StagingPath,
+                prepared.SourceName,
+                requestedPages,
+                prepared.PageCount,
+                840,
+                1188,
+                progress,
+                cancellationToken);
+
+            using var descriptor = ParcelFileDescriptor.Open(new Java.IO.File(cache.GetSourcePath(job)), ParcelFileMode.ReadOnly)
+                ?? throw new InvalidOperationException("无法读取 PDF 文件。");
+            using var renderer = new PdfRenderer(descriptor);
+            var pages = new List<AndroidPdfImportPage>(requestedPages.Length);
+            var completed = 0;
+            foreach (var pageNumber in requestedPages)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                byte[] imageBytes;
+                var fromCache = cache.TryReadPage(job, pageNumber, out imageBytes);
+                if (!fromCache)
+                {
+                    progress?.Report(new PdfImportProgress("渲染", completed, requestedPages.Length, pageNumber, false, $"正在渲染第 {pageNumber} 页…"));
+                    imageBytes = RenderPage(renderer, pageNumber - 1);
+                    await cache.SavePageAsync(job, pageNumber, imageBytes, ".jpg", cancellationToken);
+                }
+
+                pages.Add(new AndroidPdfImportPage(new NotebookPage
+                {
+                    Title = $"PDF 第 {pageNumber} 页",
+                    PaperTemplate = "Blank",
+                    PaperColor = "#FFFFFF",
+                    BackgroundImageData = Convert.ToBase64String(imageBytes),
+                    BackgroundSourceType = "PDF",
+                    BackgroundSourceName = prepared.SourceName,
+                    BackgroundPageNumber = pageNumber
+                }, fromCache));
+                completed++;
+                progress?.Report(new PdfImportProgress(
+                    fromCache ? "缓存" : "渲染",
+                    completed,
+                    requestedPages.Length,
+                    pageNumber,
+                    fromCache,
+                    fromCache ? $"已从缓存恢复第 {pageNumber} 页" : $"已完成第 {pageNumber} 页"));
+            }
+
+            await cache.MarkCompletedAsync(job, cancellationToken);
+            return pages;
+        }
+        catch (System.OperationCanceledException)
+        {
+            if (job is not null) await cache.MarkCancelledAsync(job, CancellationToken.None);
+            throw;
+        }
+        catch (Exception exception)
+        {
+            if (job is not null) await cache.MarkFailedAsync(job, exception, CancellationToken.None);
+            throw;
+        }
+    }
+
+    private static byte[] RenderPage(PdfRenderer renderer, int zeroBasedPageIndex)
+    {
+        using var page = renderer.OpenPage(zeroBasedPageIndex);
+        const int outputWidth = 840;
+        const int outputHeight = 1188;
+        using var bitmap = Bitmap.CreateBitmap(outputWidth, outputHeight, Bitmap.Config.Argb8888!)
+            ?? throw new InvalidOperationException("无法创建 PDF 页面图像。");
+        bitmap.EraseColor(AColor.White);
+        var scale = Math.Min(outputWidth / (double)Math.Max(1, page.Width), outputHeight / (double)Math.Max(1, page.Height));
+        var width = Math.Max(1, (int)Math.Round(page.Width * scale));
+        var height = Math.Max(1, (int)Math.Round(page.Height * scale));
+        var left = (outputWidth - width) / 2;
+        var top = (outputHeight - height) / 2;
+        using var destination = new Android.Graphics.Rect(left, top, left + width, top + height);
+        page.Render(bitmap, destination, null, PdfRenderMode.ForDisplay);
+        using var stream = new MemoryStream();
+        if (!bitmap.Compress(Bitmap.CompressFormat.Jpeg!, 88, stream))
+            throw new InvalidDataException("PDF 页面图像编码失败。");
+        return stream.ToArray();
+    }
     public async Task<string> ExportAndShareAsync(NotebookDocument notebook, IReadOnlyList<NotebookPage>? selectedPages = null, CancellationToken cancellationToken = default)
     {
         var pages = selectedPages ?? notebook.Pages;

@@ -541,6 +541,9 @@ internal static class Program
             var importRangeBox = (TextBox)(window.FindName("PdfImportRangeBox") ?? throw new InvalidOperationException("Missing PDF range box."));
             var importRangeHint = (TextBlock)(window.FindName("PdfImportRangeHintText") ?? throw new InvalidOperationException("Missing PDF range hint."));
             var importContinueButton = (Button)(window.FindName("PdfImportContinueButton") ?? throw new InvalidOperationException("Missing PDF import continue button."));
+            var importProgressPanel = (StackPanel)(window.FindName("PdfImportProgressPanel") ?? throw new InvalidOperationException("Missing PDF import progress panel."));
+            var importProgressBar = (ProgressBar)(window.FindName("PdfImportProgressBar") ?? throw new InvalidOperationException("Missing PDF import progress bar."));
+            var importCancelButton = (Button)(window.FindName("PdfImportCancelButton") ?? throw new InvalidOperationException("Missing PDF import cancel button."));
             Assert(importOptionsOverlay.Visibility == Visibility.Visible && importRangeBox.Text == "1-10" && importContinueButton.IsEnabled, "PDF import options should open invisibly with a valid default range.");
             importRangeBox.Text = "3-1";
             Assert(!importContinueButton.IsEnabled && importRangeHint.Text.Contains("无法识别"), "Invalid PDF ranges should disable the continue button.");
@@ -548,6 +551,11 @@ internal static class Program
             Assert(importRangeBox.Text == "1,3,5,7,9" && importContinueButton.IsEnabled, "Odd-page PDF preset should update and validate the range.");
             Invoke(window, "PdfImportPreset_Click", new Button { Tag = "Even" }, new RoutedEventArgs());
             Assert(importRangeBox.Text == "2,4,6,8,10", "Even-page PDF preset should update the range.");
+            Invoke(window, "SetPdfImportBusy", true);
+            Assert(importProgressPanel.Visibility == Visibility.Visible && !importRangeBox.IsEnabled && !importContinueButton.IsEnabled && Equals(importCancelButton.Content, "取消导入"), "PDF import busy state should expose progress and cancellation without blocking the hidden UI test.");
+            importProgressBar.Value = 0.5;
+            Invoke(window, "SetPdfImportBusy", false);
+            Assert(importProgressPanel.Visibility == Visibility.Collapsed && importRangeBox.IsEnabled && importCancelButton.IsEnabled, "PDF import busy state should restore controls after completion or cancellation.");
             Invoke(window, "ClosePdfImportOptions");
             Assert(importOptionsOverlay.Visibility == Visibility.Collapsed, "PDF import options should close without showing a window.");
 

@@ -502,6 +502,54 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
     File.Delete(missingPagesPath);
 
 
+    var parsedPdfPages = PdfPageRangeService.Parse("1-3，5；7—9", 10);
+    Assert(parsedPdfPages.SequenceEqual(new[] { 1, 2, 3, 5, 7, 8, 9 }), "PDF 页码范围应支持中文标点和长横线");
+    Assert(PdfPageRangeService.Parse("1-500", 500).Count == 500, "PDF 导入应支持 500 页压力目标");
+    var tooManyPdfPagesRejected = false;
+    try { PdfPageRangeService.Parse("1-501", 501); }
+    catch (InvalidDataException) { tooManyPdfPagesRejected = true; }
+    Assert(tooManyPdfPagesRejected, "PDF 单次导入应限制为 500 页");
+
+    var pdfSourcePath = Path.Combine(root, "large-import-source.pdf");
+    var pdfSourceBytes = Enumerable.Range(0, 2 * 1024 * 1024).Select(index => (byte)(index % 251)).ToArray();
+    await File.WriteAllBytesAsync(pdfSourcePath, pdfSourceBytes);
+    var pdfCacheRoot = Path.Combine(root, "PdfImportCache");
+    var pdfCache = new PdfImportCacheService(pdfCacheRoot, 32L * 1024 * 1024);
+    var pdfProgressEvents = new List<PdfImportProgress>();
+    var pdfProgress = new Progress<PdfImportProgress>(item => pdfProgressEvents.Add(item));
+    var pdfJob = await pdfCache.PrepareAsync(pdfSourcePath, "large.pdf", [1, 3, 5], 10, 840, 1188, pdfProgress);
+    await pdfCache.SavePageAsync(pdfJob, 1, new byte[] { 1, 2, 3 }, ".jpg");
+    await pdfCache.SavePageAsync(pdfJob, 3, new byte[] { 4, 5, 6 }, ".jpg");
+    await pdfCache.MarkCancelledAsync(pdfJob);
+    var resumedPdfJob = await pdfCache.PrepareAsync(pdfSourcePath, "large.pdf", [1, 3, 5], 10, 840, 1188);
+    Assert(resumedPdfJob.JobId == pdfJob.JobId && resumedPdfJob.CachedPages.Count == 2, "取消后的 PDF 导入应复用相同任务和已完成页面");
+    Assert(pdfCache.TryReadPage(resumedPdfJob, 1, out var cachedPdfPage) && cachedPdfPage.SequenceEqual(new byte[] { 1, 2, 3 }), "PDF 页面缓存应可正确读取");
+    Assert(pdfCache.GetMissingPages(resumedPdfJob).SequenceEqual(new[] { 5 }), "PDF 续接应只渲染缺失页面");
+    await pdfCache.SavePageAsync(resumedPdfJob, 5, new byte[] { 7, 8, 9 }, ".jpg");
+    await pdfCache.MarkCompletedAsync(resumedPdfJob);
+    var completedPdfJob = await pdfCache.LoadAsync(resumedPdfJob.JobId);
+    Assert(completedPdfJob?.Status == PdfImportJobStatus.Completed && completedPdfJob.CachedPages.Count == 3, "PDF 完成状态和缓存清单应原子持久化");
+
+    var cancelledBeforePdfPrepare = false;
+    using (var cancelledPdfToken = new CancellationTokenSource())
+    {
+        cancelledPdfToken.Cancel();
+        try { await pdfCache.PrepareAsync(pdfSourcePath, "large.pdf", [2], 10, 840, 1188, cancellationToken: cancelledPdfToken.Token); }
+        catch (OperationCanceledException) { cancelledBeforePdfPrepare = true; }
+    }
+    Assert(cancelledBeforePdfPrepare, "PDF 缓存准备应响应后台取消令牌");
+
+    pdfSourceBytes[0] ^= 0x5A;
+    await File.WriteAllBytesAsync(pdfSourcePath, pdfSourceBytes);
+    var changedPdfJob = await pdfCache.PrepareAsync(pdfSourcePath, "large.pdf", [1, 3, 5], 10, 840, 1188);
+    Assert(changedPdfJob.JobId != resumedPdfJob.JobId && changedPdfJob.CachedPages.Count == 0, "PDF 内容变化后必须失效旧缓存");
+    changedPdfJob.CachedPages[1] = "../escape.jpg";
+    var traversalCacheRejected = false;
+    try { pdfCache.TryReadPage(changedPdfJob, 1, out _); }
+    catch (InvalidDataException) { traversalCacheRejected = true; }
+    Assert(traversalCacheRejected, "PDF 缓存清单必须拒绝路径越界");
+    await pdfCache.PruneAsync(changedPdfJob.JobId);
+
     Console.WriteLine("PAPERNOTE CORE TESTS PASS");
 }
 finally

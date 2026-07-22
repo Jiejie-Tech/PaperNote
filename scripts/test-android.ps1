@@ -24,7 +24,13 @@ $sourceAssertions=@(
   @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='GroupSelection';Label='object grouping'},
   @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='UngroupSelection';Label='object ungrouping'},
   @{Path='src\PaperNote.Mobile\Platforms\Android\AndroidPageRenderer.cs';Pattern='IsContentVisible';Label='layer visibility rendering'},
-  @{Path='src\PaperNote.Mobile\Platforms\Android\AndroidPageRenderer.cs';Pattern='GetEffectiveOpacity';Label='layer opacity rendering'}
+  @{Path='src\PaperNote.Mobile\Platforms\Android\AndroidPageRenderer.cs';Pattern='GetEffectiveOpacity';Label='layer opacity rendering'},
+  @{Path='src\PaperNote.Core\Services\PdfImportCacheService.cs';Pattern='MarkCancelledAsync';Label='resumable PDF import cache'},
+  @{Path='src\PaperNote.Core\Services\PdfPageRangeService.cs';Pattern='MaximumImportPageCount = 500';Label='500-page PDF range support'},
+  @{Path='src\PaperNote.Mobile\Services\AndroidPdfService.cs';Pattern='PrepareImportAsync';Label='staged Android PDF import'},
+  @{Path='src\PaperNote.Mobile\Services\AndroidPdfService.cs';Pattern='cache.TryReadPage';Label='Android PDF cache resume'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='PdfImportCancelButton';Label='visible Android PDF cancellation'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='PdfPageRangeService.Parse';Label='Android PDF page range selection'}
 )
 foreach($assertion in $sourceAssertions){
   $path=Join-Path $environment.RepoRoot $assertion.Path

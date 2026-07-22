@@ -30,6 +30,11 @@ public sealed class EditorPage : ContentPage
     private readonly Dictionary<InkCanvasTool, Button> _toolButtons = [];
     private readonly Dictionary<InkCanvasTool, string> _toolLabels = [];
     private CancellationTokenSource? _saveCts;
+    private CancellationTokenSource? _pdfImportCts;
+    private readonly Border _pdfProgressOverlay;
+    private readonly ProgressBar _pdfProgressBar;
+    private readonly Label _pdfProgressLabel;
+    private readonly Button _pdfCancelButton;
     private NotebookPage? _page;
     private bool _loading;
     private double _penWidth = 3.2;
@@ -157,12 +162,50 @@ public sealed class EditorPage : ContentPage
         var bottom = new Grid { Padding = new Thickness(10, 7, 10, 10), ZIndex = 20, ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) }, BackgroundColor = UiTheme.Surface };
         bottom.Add(_pageStatus); bottom.Add(bottomButtons, 1);
 
+        _pdfProgressBar = new ProgressBar { Progress = 0, ProgressColor = UiTheme.Accent, BackgroundColor = UiTheme.Border, HeightRequest = 8 };
+        _pdfProgressLabel = new Label { Text = "正在准备 PDF…", TextColor = UiTheme.Text, FontSize = 13, HorizontalTextAlignment = TextAlignment.Center };
+        var pdfCancelButton = UiTheme.Button("取消导入");
+        _pdfCancelButton = pdfCancelButton;
+        pdfCancelButton.Clicked += (_, _) =>
+        {
+            pdfCancelButton.IsEnabled = false;
+            pdfCancelButton.Text = "正在取消…";
+            _pdfImportCts?.Cancel();
+        };
+        pdfCancelButton.AutomationId = "PdfImportCancelButton";
+        _pdfProgressOverlay = new Border
+        {
+            IsVisible = false,
+            ZIndex = 100,
+            Padding = 24,
+            Margin = new Thickness(18),
+            HorizontalOptions = LayoutOptions.Center,
+            VerticalOptions = LayoutOptions.Center,
+            WidthRequest = 330,
+            BackgroundColor = UiTheme.Surface,
+            Stroke = UiTheme.Border,
+            StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = 18 },
+            Content = new VerticalStackLayout
+            {
+                Spacing = 14,
+                Children =
+                {
+                    new Label { Text = "正在导入 PDF", FontSize = 20, FontAttributes = FontAttributes.Bold, TextColor = UiTheme.Text, HorizontalTextAlignment = TextAlignment.Center },
+                    _pdfProgressBar,
+                    _pdfProgressLabel,
+                    _pdfCancelButton
+                }
+            }
+        };
+
         var root = new Grid
         {
             IsClippedToBounds = true,
             RowDefinitions = { new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Star), new RowDefinition(GridLength.Auto) }
         };
         root.Add(header); root.Add(toolbar, 0, 1); root.Add(_mainGrid, 0, 2); root.Add(bottom, 0, 3);
+        root.Add(_pdfProgressOverlay);
+        Grid.SetRowSpan(_pdfProgressOverlay, 4);
         Content = root;
         SizeChanged += (_, _) => _mainGrid.ColumnDefinitions[0].Width = Width >= 900 ? 230 : 0;
     }
@@ -182,6 +225,7 @@ public sealed class EditorPage : ContentPage
         base.OnDisappearing();
         DetachLifecycleEvents();
         CancelPendingSave();
+        _pdfImportCts?.Cancel();
         StopActiveRecording();
         _audio.StopPlayback();
         _audioTimer.Stop();
@@ -1035,7 +1079,7 @@ public sealed class EditorPage : ContentPage
 
     private async void Pdf_Clicked(object? sender, EventArgs e)
     {
-        if (_repository.Current is null) return;
+        if (_repository.Current is null || _pdfImportCts is not null) return;
         var choice = await DisplayActionSheetAsync("PDF", "取消", null, "导入 PDF 页面", "导出全部页面为 PDF", "仅导出当前页");
         try
         {
@@ -1043,19 +1087,78 @@ public sealed class EditorPage : ContentPage
             {
                 var file = await _transfer.PickPdfAsync();
                 if (file is null) return;
-                var imported = await _pdf.ImportAsync(file);
+                _pdfImportCts = new CancellationTokenSource();
+                var token = _pdfImportCts.Token;
+                ShowPdfImportProgress("正在读取 PDF…", 0);
+                var progress = new Progress<PdfImportProgress>(item =>
+                {
+                    ShowPdfImportProgress($"{item.Message} · {item.CompletedPages}/{item.TotalPages}", item.Fraction);
+                    _pageStatus.Text = $"PDF：{item.Message}";
+                });
+
+                await using var prepared = await _pdf.PrepareImportAsync(file, progress, token);
+                HidePdfImportProgress();
+                var range = await DisplayPromptAsync(
+                    "选择 PDF 页码",
+                    $"共 {prepared.PageCount} 页，一次最多 {PdfPageRangeService.MaximumImportPageCount} 页。可输入 1-20,25,30-40。",
+                    "开始导入",
+                    "取消",
+                    PdfPageRangeService.DefaultSelection(prepared.PageCount),
+                    maxLength: 200,
+                    keyboard: Keyboard.Text);
+                if (range is null) return;
+                var pageNumbers = PdfPageRangeService.Parse(range, prepared.PageCount);
+                ShowPdfImportProgress($"准备导入 {pageNumbers.Count} 页…", 0);
+                var imported = await _pdf.ImportAsync(prepared, pageNumbers, progress, token);
                 var notebook = _repository.Current.Document;
                 var index = notebook.Pages.FindIndex(page => page.Id == notebook.CurrentPageId) + 1;
-                notebook.Pages.InsertRange(index, imported);
-                notebook.CurrentPageId = imported.First().Id;
-                RefreshPageCards(); LoadPage(imported.First()); ScheduleSave();
+                var pages = imported.Select(item => item.Page).ToArray();
+                notebook.Pages.InsertRange(index, pages);
+                notebook.CurrentPageId = pages[0].Id;
+                RefreshPageCards();
+                LoadPage(pages[0]);
+                await _repository.SaveCurrentAsync(token);
+                var restored = imported.Count(item => item.FromCache);
+                _pageStatus.Text = restored > 0
+                    ? $"已导入 {pages.Length} 页 · 从缓存续接 {restored} 页"
+                    : $"已导入 {pages.Length} 页 PDF";
             }
             else if (choice == "导出全部页面为 PDF") await _pdf.ExportAndShareAsync(_repository.Current.Document);
             else if (choice == "仅导出当前页" && _page is not null) await _pdf.ExportAndShareAsync(_repository.Current.Document, [_page]);
         }
-        catch (Exception exception) { await DisplayAlertAsync("PDF 操作失败", exception.Message, "知道了"); }
+        catch (System.OperationCanceledException)
+        {
+            _pageStatus.Text = "PDF 导入已取消 · 下次选择同一文件会续接";
+        }
+        catch (Exception exception)
+        {
+            await DisplayAlertAsync("PDF 操作失败", $"{exception.Message}\n\n已经完成的 PDF 页面会保留，可重新选择同一文件续接。", "知道了");
+        }
+        finally
+        {
+            HidePdfImportProgress();
+            _pdfImportCts?.Dispose();
+            _pdfImportCts = null;
+        }
     }
 
+    private void ShowPdfImportProgress(string message, double progress)
+    {
+        _pdfProgressOverlay.IsVisible = true;
+        _pdfProgressBar.Progress = Math.Clamp(progress, 0, 1);
+        _pdfProgressLabel.Text = message;
+        if (_pdfImportCts?.IsCancellationRequested != true)
+        {
+            _pdfCancelButton.IsEnabled = true;
+            _pdfCancelButton.Text = "取消导入";
+        }
+    }
+
+    private void HidePdfImportProgress()
+    {
+        _pdfProgressOverlay.IsVisible = false;
+        _pdfProgressBar.Progress = 0;
+    }
     private void UpdateHistory()
     {
         if (_undo is null || _redo is null) return;
