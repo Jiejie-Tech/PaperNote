@@ -1,4 +1,4 @@
-# Builds the Windows release package. Use build-android.ps1 for the Android APK.
+# Builds the Windows release package. Use build-android.ps1 for the Android APK and Android ZIP.
 [CmdletBinding()]
 param(
     [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$')]

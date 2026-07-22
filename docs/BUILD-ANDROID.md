@@ -45,9 +45,21 @@ dotnet workload repair
 2. 在用户本地签名目录创建或读取发布密钥；
 3. 构建 Release APK；
 4. 使用 Android 工具验证签名；
-5. 将最终 APK、SHA-256 和元数据复制到 `artifacts\android`。
+5. 将最终 APK、APK SHA-256 和元数据复制到 `artifacts\android`；
+6. 生成包含 APK、校验文件、安装指南和许可文件的 Android 分发压缩包；
+7. 将压缩包及其 SHA-256 写入 `artifacts\releases`。
 
-首次创建密钥后应安全备份。以后若丢失该密钥，将无法用同一签名覆盖安装已发布的应用。
+发布产物布局：
+
+```text
+artifacts\android\PaperNote-Android-<版本>.apk
+artifacts\android\PaperNote-Android-<版本>.apk.sha256
+artifacts\android\PaperNote-Android-<版本>.metadata.txt
+artifacts\releases\PaperNote-Android-<版本>.zip
+artifacts\releases\PaperNote-Android-<版本>.zip.sha256
+```
+
+压缩包适合直接发给用户，单独 APK 适合发布页提供快速下载。首次创建密钥后应安全备份；以后若丢失该密钥，将无法用同一签名覆盖安装已发布的应用。
 
 ## 5. 后台设备测试
 
@@ -62,7 +74,10 @@ dotnet workload repair
 - 全新启动和资料库；
 - 新建笔记与原生墨迹；
 - 页面管理与形状插入；
-- 设置中的手指书写选项；
+- 手机窄屏下标题栏、两排工具栏和底栏均可见、可点击；
+- 钢笔、荧光笔、橡皮擦、粗细、颜色、手指开关、撤销和重做；
+- 手指书写与单指平移切换，以及编辑器和设置页状态同步；
+- 橡皮擦未命中不产生虚假撤销记录；
 - 子页面返回和根页退到后台；
 - 重启后的内容持久化；
 - logcat 中无致命异常。
@@ -93,6 +108,6 @@ dotnet workload repair
 - 临时调试数据库、私人笔记和测试导出内容；
 - `bin`、`obj` 和本地构建缓存。
 
-正式发布前保存 APK 的 SHA-256，并确认 v1/v2/v3 签名验证通过。
+正式发布前保存 APK 和 Android 压缩包的 SHA-256，并确认 APK 的 v1/v2/v3 签名验证通过。
 
 Windows 与 Android 同版本发布、覆盖升级和双托管平台核对流程见 [统一发布指南](RELEASE.md)。

@@ -38,6 +38,14 @@ if (-not (Test-Path -LiteralPath $keyStore)) {
 }
 
 $project = Join-Path $environment.BuildRoot 'src\PaperNote.Mobile\PaperNote.Mobile.csproj'
+[xml]$projectDefinition = Get-Content -LiteralPath $project -Raw -Encoding UTF8
+$version = [string]$projectDefinition.Project.PropertyGroup.ApplicationDisplayVersion
+$versionCode = [string]$projectDefinition.Project.PropertyGroup.ApplicationVersion
+if ([string]::IsNullOrWhiteSpace($version) -or [string]::IsNullOrWhiteSpace($versionCode)) {
+    throw 'Android version metadata is missing from PaperNote.Mobile.csproj.'
+}
+$packageName = "PaperNote-Android-$version"
+
 $arguments = @(
     'build', $project,
     '-c', 'Release',
@@ -60,15 +68,15 @@ if (-not $sourceApk) { throw "Signed APK was not found in $outputDirectory" }
 
 $artifactDirectory = Join-Path $environment.RepoRoot 'artifacts\android'
 New-Item -ItemType Directory -Path $artifactDirectory -Force | Out-Null
-$artifactApk = Join-Path $artifactDirectory 'PaperNote-Android-1.0.0.apk'
+$artifactApk = Join-Path $artifactDirectory "$packageName.apk"
 Copy-Item -LiteralPath $sourceApk.FullName -Destination $artifactApk -Force
 
 $badging = (& $environment.Aapt2 dump badging $artifactApk 2>&1 | Out-String)
 if ($LASTEXITCODE -ne 0) { throw 'Unable to read APK metadata.' }
 $requiredMetadata = @(
     "name='com.jiejietech.papernote'",
-    "versionCode='1'",
-    "versionName='1.0.0'",
+    "versionCode='$versionCode'",
+    "versionName='$version'",
     "minSdkVersion:'23'",
     "targetSdkVersion:'36'",
     "application: label='PaperNote' icon='res/mipmap"
@@ -85,12 +93,12 @@ if ($LASTEXITCODE -ne 0 -or $signature -notmatch 'Verified using v[12] scheme') 
 $hash = (Get-FileHash -LiteralPath $artifactApk -Algorithm SHA256).Hash.ToLowerInvariant()
 $hashPath = "$artifactApk.sha256"
 Set-Content -LiteralPath $hashPath -Value "$hash  $([IO.Path]::GetFileName($artifactApk))" -Encoding ASCII
-$metadataPath = Join-Path $artifactDirectory 'PaperNote-Android-1.0.0.metadata.txt'
+$metadataPath = Join-Path $artifactDirectory "$packageName.metadata.txt"
 @(
     'PaperNote Android package metadata',
     'package=com.jiejietech.papernote',
-    'versionName=1.0.0',
-    'versionCode=1',
+    "versionName=$version",
+    "versionCode=$versionCode",
     'minSdk=23',
     'targetSdk=36',
     'abis=armeabi-v7a,arm64-v8a,x86,x86_64',
@@ -103,6 +111,66 @@ $metadataPath = Join-Path $artifactDirectory 'PaperNote-Android-1.0.0.metadata.t
     $signature.Trim()
 ) | Set-Content -LiteralPath $metadataPath -Encoding UTF8
 
+$releaseDirectory = Join-Path $environment.RepoRoot 'artifacts\releases'
+$stagingDirectory = Join-Path $environment.RepoRoot "artifacts\staging\$packageName"
+$zipPath = Join-Path $releaseDirectory "$packageName.zip"
+
+function Assert-PathInsideRepository([string]$Path) {
+    $repositoryPath = [IO.Path]::GetFullPath($environment.RepoRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $resolvedPath = [IO.Path]::GetFullPath($Path)
+    $requiredPrefix = $repositoryPath + [IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedPath.StartsWith($requiredPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Unsafe package path outside repository: $resolvedPath"
+    }
+}
+
+Assert-PathInsideRepository $stagingDirectory
+Assert-PathInsideRepository $zipPath
+if (Test-Path -LiteralPath $stagingDirectory) {
+    Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
+}
+New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
+
+Copy-Item -LiteralPath $artifactApk -Destination (Join-Path $stagingDirectory ([IO.Path]::GetFileName($artifactApk)))
+Copy-Item -LiteralPath $hashPath -Destination (Join-Path $stagingDirectory ([IO.Path]::GetFileName($hashPath)))
+Copy-Item -LiteralPath $metadataPath -Destination (Join-Path $stagingDirectory ([IO.Path]::GetFileName($metadataPath)))
+Copy-Item -LiteralPath (Join-Path $environment.RepoRoot 'docs\ANDROID.md') -Destination (Join-Path $stagingDirectory 'ANDROID-GUIDE.md')
+foreach ($document in @('LICENSE', 'PRIVACY.md', 'SECURITY.md', 'THIRD-PARTY-NOTICES.md')) {
+    Copy-Item -LiteralPath (Join-Path $environment.RepoRoot $document) -Destination (Join-Path $stagingDirectory $document)
+}
+
+$packageReadme = @(
+    "PaperNote Android $version",
+    '',
+    '安装：',
+    '1. 解压本压缩包。',
+    "2. 在 Android 手机或平板上打开 $packageName.apk。",
+    '3. 若系统阻止安装，只为当前文件管理器或浏览器临时开启“安装未知应用”。',
+    '4. 安装完成后关闭该来源的安装权限。',
+    '',
+    '升级与数据安全：',
+    '- 升级时直接覆盖安装，不要先卸载旧版本。',
+    '- 卸载或清除应用数据会删除应用私有目录中的本地笔记。',
+    '- 升级或卸载前，建议在应用内创建整库备份并复制到安全位置。',
+    '',
+    '文件校验：',
+    "SHA-256: $hash",
+    '',
+    '详细说明请阅读 ANDROID-GUIDE.md。'
+) -join [Environment]::NewLine
+Set-Content -LiteralPath (Join-Path $stagingDirectory 'README-Android.txt') -Value $packageReadme -Encoding UTF8
+
+if (Test-Path -LiteralPath $zipPath) {
+    Remove-Item -LiteralPath $zipPath -Force
+}
+Compress-Archive -Path (Join-Path $stagingDirectory '*') -DestinationPath $zipPath -CompressionLevel Optimal
+$zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$zipHashPath = "$zipPath.sha256"
+Set-Content -LiteralPath $zipHashPath -Value "$zipHash  $([IO.Path]::GetFileName($zipPath))" -Encoding ASCII
+
 Write-Host "ANDROID APK READY: $artifactApk"
-Write-Host "SHA256: $hash"
+Write-Host "ANDROID PACKAGE READY: $zipPath"
+Write-Host "APK SHA256: $hash"
+Write-Host "ZIP SHA256: $zipHash"
 Write-Host "SIGNING KEY (private, not in repository): $keyStore"

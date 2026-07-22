@@ -40,13 +40,18 @@
 .\scripts\build-release.ps1 -Version 1.0.0 -Runtime win-arm64 -SkipTests
 ```
 
-## 4. 生成 Android 发布 APK
+## 4. 生成 Android 发布包
 
 ```powershell
 .\scripts\build-android.ps1
 ```
 
-输出位于 `artifacts\android`，包含已签名 APK、SHA-256 和构建元数据。Android 构建会使用 ASCII 工作目录，避免资源工具在包含非 ASCII 字符的路径下失败。
+脚本生成两组产物：
+
+- `artifacts\android`：已签名 APK、APK SHA-256 和构建元数据；
+- `artifacts\releases`：可直接分发的 Android ZIP 压缩包及 ZIP SHA-256。
+
+压缩包内含 APK、APK 校验文件、安装说明、Android 使用指南、许可证、隐私说明、安全策略和第三方许可。Android 构建会使用 ASCII 工作目录，避免资源工具在包含非 ASCII 字符的路径下失败。
 
 发布前必须确认：
 
@@ -58,8 +63,8 @@
 
 ## 5. 发布检查
 
-1. 比较 Windows 包、Android APK 和源码标签，确认全部来自同一提交。
-2. 记录并发布两个安装包的 SHA-256；不要只依赖文件名。
+1. 比较 Windows 包、Android ZIP、Android APK 和源码标签，确认全部来自同一提交。
+2. 记录并发布 Windows ZIP、Android ZIP 和 Android APK 的 SHA-256；不要只依赖文件名。
 3. 在 GitHub 与 Gitee 使用一致的版本号、变更说明、安装说明和校验值。
 4. 上传安装包前再次运行开源审计，并确认 `artifacts`、`dist`、签名文件和密码没有被提交。
 5. 发布后从公开页面重新下载安装包，在干净环境中完成一次启动、创建笔记、保存、重启和导出检查。

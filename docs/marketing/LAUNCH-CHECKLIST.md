@@ -3,7 +3,7 @@
 ## 发布包
 
 - [ ] Windows Release 压缩包可以在干净电脑启动
-- [ ] Android APK 已通过签名验证并记录 SHA-256
+- [ ] Android APK 与 Android ZIP 已通过签名验证/完整性验证并记录 SHA-256
 - [ ] 覆盖安装不会意外清除用户数据
 - [ ] 下载文件名、版本号和更新日志一致
 - [ ] 发布签名已在仓库外安全备份
@@ -30,7 +30,7 @@
 - [ ] 只描述已验证功能
 - [ ] 明确当前没有账号云同步、多人协作和 OCR
 - [ ] 不使用来源混淆、比较式或绝对化措辞
-- [ ] 下载位置同时包含 Windows 包和 Android APK
+- [ ] 下载位置同时包含 Windows 包、Android ZIP 和可选的 Android APK
 - [ ] 提醒 Android 用户卸载前备份
 
 ## 发布后
