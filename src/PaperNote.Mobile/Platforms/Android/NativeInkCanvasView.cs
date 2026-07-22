@@ -20,6 +20,7 @@ public sealed class NativeInkCanvasView : View
     private readonly Paint _paint = new(PaintFlags.AntiAlias | PaintFlags.Dither);
     private readonly Stack<CanvasSnapshot> _undo = new();
     private readonly Stack<CanvasSnapshot> _redo = new();
+    private readonly InkSpatialIndex _inkSpatialIndex = new();
     private PaperInkDocument _document = new();
     private NotebookPage? _page;
     private InkCanvasTool _tool;
@@ -78,6 +79,7 @@ public sealed class NativeInkCanvasView : View
         if (!ReferenceEquals(_document, view.Document))
         {
             _document = view.Document ?? new PaperInkDocument();
+            _inkSpatialIndex.Rebuild(_document);
             _undo.Clear();
             _redo.Clear();
             HistoryChanged?.Invoke(this, EventArgs.Empty);
@@ -118,12 +120,30 @@ public sealed class NativeInkCanvasView : View
 
     private void DrawPage(Canvas canvas)
     {
-        AndroidPageRenderer.DrawPage(canvas, _page, _document, _paint, _backgroundBitmap);
+        var visibleStrokes = GetVisibleStrokes();
+        AndroidPageRenderer.DrawPage(canvas, _page, _document, _paint, _backgroundBitmap, visibleStrokes);
         _paint.SetStyle(Paint.Style.Stroke);
         _paint.StrokeWidth = 1f;
         _paint.Color = Color.Argb(30, 20, 30, 50);
         canvas.DrawRect(0, 0, PageWidth, PageHeight, _paint);
         DrawSelection(canvas);
+    }
+
+    private IReadOnlyList<PaperInkStroke> GetVisibleStrokes()
+    {
+        var scale = _fitScale * _zoom;
+        if (scale <= 0 || Width <= 0 || Height <= 0) return _document.Strokes;
+        const double overscan = 32;
+        var left = (0 - _offsetX) / scale - overscan;
+        var top = (0 - _offsetY) / scale - overscan;
+        var right = (Width - _offsetX) / scale + overscan;
+        var bottom = (Height - _offsetY) / scale + overscan;
+        var indexed = _inkSpatialIndex.Query(left, top, right - left, bottom - top);
+        if (_activeStroke is null || indexed.Contains(_activeStroke, ReferenceEqualityComparer.Instance)) return indexed;
+        var result = new List<PaperInkStroke>(indexed.Count + 1);
+        result.AddRange(indexed);
+        result.Add(_activeStroke);
+        return result;
     }
 
     private void DrawTemplate(Canvas canvas, string? template)
@@ -250,7 +270,9 @@ public sealed class NativeInkCanvasView : View
                 {
                     AddPoint(e, x, y, e.Pressure);
                     if (_smoothingEnabled) InkEditingService.SmoothStroke(_activeStroke, .35);
+                    var completedStroke = _activeStroke;
                     _activeStroke = null;
+                    _inkSpatialIndex.Update(_document, null, [completedStroke]);
                     InkChanged?.Invoke(this, EventArgs.Empty);
                     HistoryChanged?.Invoke(this, EventArgs.Empty);
                 }
@@ -356,22 +378,67 @@ public sealed class NativeInkCanvasView : View
         var x = (screenX - _offsetX) / scale;
         var y = (screenY - _offsetY) / scale;
         var radius = 18 / Math.Max(scale, 0.01f);
-        var matches = _document.Strokes.Where(stroke => stroke.Points.Any(point => Distance(point.X, point.Y, x, y) <= radius)).ToArray();
+        var matches = _inkSpatialIndex.QueryCircle(x, y, radius)
+            .Where(stroke => StrokeTouchesCircle(stroke, x, y, radius))
+            .ToArray();
         if (matches.Length == 0) return;
         if (!_eraseUndoPushed)
         {
             PushUndo();
             _eraseUndoPushed = true;
         }
-        var changed = _eraserMode == InkEraserMode.Stroke
-            ? RemoveWholeStrokes(matches)
-            : InkEditingService.ErasePartial(_document, x, y, radius);
+
+        var changed = 0;
+        if (_eraserMode == InkEraserMode.Stroke)
+        {
+            changed = RemoveWholeStrokes(matches);
+            if (changed > 0) _inkSpatialIndex.Update(_document, matches, null);
+        }
+        else
+        {
+            var result = InkEditingService.ErasePartialDetailed(_document, x, y, radius, matches);
+            changed = result.ChangedCount;
+            if (changed > 0) _inkSpatialIndex.Update(_document, result.RemovedStrokes, result.AddedStrokes);
+        }
         if (changed == 0) return;
         Invalidate();
         InkChanged?.Invoke(this, EventArgs.Empty);
         HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
+
+    private static bool StrokeTouchesCircle(PaperInkStroke stroke, double x, double y, double radius)
+    {
+        var radiusSquared = radius * radius;
+        if (stroke.Points.Count == 1)
+        {
+            var point = stroke.Points[0];
+            return DistanceSquared(point.X, point.Y, x, y) <= radiusSquared;
+        }
+        for (var index = 1; index < stroke.Points.Count; index++)
+        {
+            var start = stroke.Points[index - 1];
+            var end = stroke.Points[index];
+            if (DistanceToSegmentSquared(x, y, start.X, start.Y, end.X, end.Y) <= radiusSquared) return true;
+        }
+        return false;
+    }
+
+    private static double DistanceToSegmentSquared(double x, double y, double x1, double y1, double x2, double y2)
+    {
+        var dx = x2 - x1;
+        var dy = y2 - y1;
+        if (Math.Abs(dx) < double.Epsilon && Math.Abs(dy) < double.Epsilon) return DistanceSquared(x, y, x1, y1);
+        var projection = Math.Clamp(((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy), 0, 1);
+        return DistanceSquared(x, y, x1 + projection * dx, y1 + projection * dy);
+    }
+
+    private static double DistanceSquared(double x1, double y1, double x2, double y2)
+    {
+        var dx = x1 - x2;
+        var dy = y1 - y2;
+        return dx * dx + dy * dy;
+    }
 
     private int RemoveWholeStrokes(IEnumerable<PaperInkStroke> strokes)
     {
@@ -422,6 +489,7 @@ public sealed class NativeInkCanvasView : View
         if (_document.IsEmpty) return;
         PushUndo();
         _document.Strokes.Clear();
+        _inkSpatialIndex.Rebuild(_document);
         Invalidate();
         InkChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -433,6 +501,7 @@ public sealed class NativeInkCanvasView : View
     {
         _document.Version = snapshot.Ink.Version;
         _document.Strokes = snapshot.Ink.Strokes.Select(stroke => stroke.Clone()).ToList();
+        _inkSpatialIndex.Rebuild(_document);
         if (_page is not null) _page.Objects = snapshot.Objects.Select(item => item.Clone()).ToList();
         if (_page is not null) SetSelection(_selectedObjectIds.Where(id => _page.Objects.Any(item => item.Id == id)));
         Invalidate();

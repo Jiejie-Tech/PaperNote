@@ -70,7 +70,7 @@ PaperNote 是一款本地优先的手写笔记与 PDF 批注应用。Windows 版
 
 ### 短版
 
-PaperNote 现在支持 Windows 和 Android 了：触控笔书写、分页模板、PDF 批注、文本图片形状、搜索和备份都能离线使用。电脑与手机/平板可以直接传 `.papernote` 文件，不需要注册账号。源码和安装包已放到 GitHub / Gitee。
+PaperNote 现在支持 Windows 和 Android：触控笔书写、分页模板、对象与图层、PDF 批注、本地录音、搜索、恢复中心和带校验的备份都能离线使用。电脑与手机/平板可以直接传 `.papernote` 文件，不需要注册账号。源码和安装包已放到 GitHub / Gitee。
 
 ### 更新版
 
@@ -81,6 +81,7 @@ PaperNote Android 1.0.0：
 - 单指平移、双指缩放
 - PDF 导入批注和导出
 - 与 Windows 交换笔记文件
+- 本地录音、草稿恢复与损坏文件抢救
 - 本地保存，无内置网络权限
 
 项目地址与 APK：发布时补充。
@@ -95,32 +96,35 @@ Local-first handwriting and PDF annotation app for Windows and Android, built wi
 
 ## Implementation status — 2026-07-22
 
-This section is the source of truth for the current offline scope.
+本节是当前离线版本能力边界的统一说明。
 
-### Implemented and covered by repository tests
+### 已实现并纳入仓库测试
 
-- Cross-platform PaperInk stores pressure, tilt, smoothing, partial/stroke erasing, opacity, and layer membership.
-- Android supports rectangle lasso, multi-object selection, move, resize, rotate, duplicate, delete, group/ungroup, z-order, lock, and batch style changes.
-- Page layers support create, activate, show/hide, lock, opacity, rename, merge, and delete-with-content-migration. Hidden content remains in the document.
-- Text, image, and shape objects preserve rotation, opacity, lock, hidden, group, and layer fields across serialization.
-- Offline search indexes notebook/page titles, tags, text objects, stored OCR text, stored handwriting-recognition text, and source names.
-- Saving writes and parses a temporary document before replacing the live file. Library backup format 2 records file length and SHA-256 and verifies every entry before import.
-- Notebook format version is 15 and migration preserves legacy ISF/PaperInk and pages created before layers existed.
-- Windows thumbnails and object overlays, plus the Android renderer, honor layer visibility and effective opacity.
+- Windows 与 Android 共用 PaperInk；支持压力、倾角、平滑、整笔/局部擦除、透明度和图层归属。
+- Android 支持矩形套索、多对象选择、移动、缩放、旋转、复制、删除、组合/取消组合、层级顺序、锁定和批量样式修改。
+- 页面图层支持新增、激活、显隐、锁定、透明度、重命名、合并和删除时迁移内容；隐藏内容不会从文件中丢失。
+- 文本、图片和形状对象的旋转、透明度、锁定、隐藏、组合和图层字段可跨平台保存。
+- 离线搜索覆盖笔记/页面标题、标签、文本对象、已存 OCR 文本、已存手写识别文本和来源名称。
+- 保存采用“临时文件写入并验证后替换”；启动时可恢复较新的临时草稿。Windows 与 Android 都提供恢复中心，可只读检查损坏文件并另存为抢救副本，原文件保持不变。
+- 读取时会修复空或重复 ID、无效图层引用、非有限墨迹数值及异常录音时间数据。
+- 大墨迹页面使用空间索引；Android 按可见视口绘制并用局部候选执行橡皮命中，避免每帧扫描全部笔迹。
+- 整库备份格式 3 包含笔记、历史版本和音频附件，记录长度与 SHA-256，并在导入前检查重复路径、越界路径、大小和内容完整性。
+- Windows 与 Android 均支持页面级本地录音、播放/暂停、重命名、删除、命名时间标记和书写时自动标记。Windows 使用 WAV，Android 使用 MPEG-4/AAC。
+- 压力测试覆盖 10,000+ 笔迹空间查询，以及 60 页、4,800 笔迹、600 对象、录音标记和图层关系的重复保存往返。
 
-### Scope boundaries
+### 当前明确边界
 
-- OCR and handwriting-recognition result fields are searchable, but the repository does not currently bundle an OCR or recognition engine.
-- Audio timeline and cue data models exist; recording capture and player UI are not yet complete.
-- Accounts, cloud sync, network AI, telemetry, advertising, and multi-user collaboration are intentionally out of scope.
-- APK, ZIP, signing keys, build output, and private notes are release artifacts or local data and are not committed.
+- OCR 和手写识别结果可以保存并搜索，但仓库尚未内置真正的离线 OCR、手写转文字或数学识别引擎。
+- 尚未提供自由形状套索、几何吸附、自动形状识别、标尺和大批量墨迹样式修改。
+- 录音暂不含波形视图、播放时笔迹高亮、麦克风设备选择和压缩质量控制。
+- PDF 尚不含大型文档页面缓存、导入进度/取消、表单编辑、测量和文档内文字搜索。
+- 完整屏幕阅读器语义、高对比度专项适配、加密设置界面和本地插件机制仍待完善。
+- 账号、云同步、联网 AI、遥测、广告和多人协作不在离线版本范围内。
+- APK、ZIP、签名密钥、构建输出和私人笔记属于发布产物或本地数据，不提交到源码仓库。
 
-### Verification
+### 验证入口
 
-```text
-dotnet run --project tests/PaperNote.Core.Tests/PaperNote.Core.Tests.csproj -c Release
-dotnet run --project tests/SmokeTest/SmokeTest.csproj -c Release
-dotnet run --project tests/BackgroundUiTest/BackgroundUiTest.csproj -c Release
-scripts/build-android.ps1
-scripts/test-android.ps1 -SkipUi
+```powershell
+.\scripts\build-android.ps1
+.\scripts\test.ps1 -SkipAndroidRuntime
 ```

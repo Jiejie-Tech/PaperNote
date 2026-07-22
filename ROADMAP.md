@@ -1,76 +1,77 @@
 # PaperNote 路线图
 
-路线图表达当前方向，不构成发布时间承诺。
+路线图表达当前方向，不构成发布时间承诺。项目只规划离线、本地能力。
 
 ## 已完成
 
-- Windows 本地资料库与分页手写
-- 纸张模板、页面对象和 PDF 批注
-- 搜索、回收站、自动保存、导入导出和整库备份
-- 跨平台 `PaperNote.Core`
-- PaperInk 跨平台墨迹
-- Android 手机和平板客户端
-- 触控笔压力、倾角和橡皮端支持
-- Android 后台自动化测试与签名 APK 构建
+- Windows 与 Android 本地资料库、分页手写、PDF 批注和跨平台 PaperInk。
+- 压力、倾角、平滑、整笔/局部擦除、矩形套索、多对象变换和页面图层。
+- 搜索、回收站、自动保存、单笔记导入导出和格式迁移。
+- 临时草稿自动恢复、Windows/Android 恢复中心、损坏文件只读抢救和另存副本。
+- 备份格式 3：笔记、历史版本、音频附件、长度和 SHA-256 完整性校验。
+- Windows/Android 本地录音、播放/暂停、重命名、删除和时间标记。
+- 大墨迹空间索引、Android 视口按需渲染和局部橡皮候选筛选。
+- 10,000+ 笔迹索引测试与 60 页/4,800 笔迹/600 对象往返压力测试。
+- Android 后台自动化测试与签名 APK 构建流程。
 
-## 近期
+## 下一阶段：高优先级
 
-- 扩充真实设备兼容性测试矩阵
-- 优化超长笔记和高笔画量页面性能
-- 改进 Android 大型 PDF 导入进度与取消体验
-- 增加崩溃恢复和备份完整性检查
-- 提升键盘、屏幕阅读器和高对比度可访问性
-- 完善发布自动化和可复现构建说明
+- 大型 PDF 页面缓存、分批导入、进度、取消和失败续接。
+- 真正可离线部署的 OCR 与手写识别引擎，并接入现有本地索引。
+- 自由形状套索、笔迹批量样式修改、跨页面移动和更精细的选择交互。
+- 标尺、直线辅助、几何吸附和自动形状识别。
+- 键盘导航、屏幕阅读器语义、高对比度和触控目标专项检查。
+- 更多 Android 真机、触控笔和低内存设备回归。
 
-## 中期
+## 后续增强
 
-- 套索选择与跨平台对象变换统一
-- 自定义模板管理
-- 页面批量操作增强
-- 可选 OCR 和文本索引
-- 局域网或用户自选存储的同步方案研究
+- PDF 文档内文字搜索、书签/大纲深化、表单、测量和页面级处理。
+- 音频波形、播放时笔迹高亮、录音质量设置和设备选择。
+- 数学识别与 LaTeX、本地加密设置界面、可选本地插件机制。
+- 页面批量操作、模板包管理和更完整的资料库统计。
 
 ## 长期探索
 
-- iOS/iPadOS 客户端
-- macOS 客户端
-- 插件与扩展机制
-- 端到端加密的多设备同步
+- iOS/iPadOS 与 macOS 客户端。
+- 用户自行配置的局域网或文件夹同步；不建设强制账号云。
+- 端到端加密的用户自管多设备交换方案。
 
 ## 明确不做
 
-- 强制账号体系
-- 广告或出售笔记内容
-- 默认上传用户数据
+- 强制账号体系、广告、出售笔记内容或默认上传用户数据。
+- 依赖联网服务才能使用的核心编辑能力。
 
 ## Implementation status — 2026-07-22
 
-This section is the source of truth for the current offline scope.
+本节是当前离线版本能力边界的统一说明。
 
-### Implemented and covered by repository tests
+### 已实现并纳入仓库测试
 
-- Cross-platform PaperInk stores pressure, tilt, smoothing, partial/stroke erasing, opacity, and layer membership.
-- Android supports rectangle lasso, multi-object selection, move, resize, rotate, duplicate, delete, group/ungroup, z-order, lock, and batch style changes.
-- Page layers support create, activate, show/hide, lock, opacity, rename, merge, and delete-with-content-migration. Hidden content remains in the document.
-- Text, image, and shape objects preserve rotation, opacity, lock, hidden, group, and layer fields across serialization.
-- Offline search indexes notebook/page titles, tags, text objects, stored OCR text, stored handwriting-recognition text, and source names.
-- Saving writes and parses a temporary document before replacing the live file. Library backup format 2 records file length and SHA-256 and verifies every entry before import.
-- Notebook format version is 15 and migration preserves legacy ISF/PaperInk and pages created before layers existed.
-- Windows thumbnails and object overlays, plus the Android renderer, honor layer visibility and effective opacity.
+- Windows 与 Android 共用 PaperInk；支持压力、倾角、平滑、整笔/局部擦除、透明度和图层归属。
+- Android 支持矩形套索、多对象选择、移动、缩放、旋转、复制、删除、组合/取消组合、层级顺序、锁定和批量样式修改。
+- 页面图层支持新增、激活、显隐、锁定、透明度、重命名、合并和删除时迁移内容；隐藏内容不会从文件中丢失。
+- 文本、图片和形状对象的旋转、透明度、锁定、隐藏、组合和图层字段可跨平台保存。
+- 离线搜索覆盖笔记/页面标题、标签、文本对象、已存 OCR 文本、已存手写识别文本和来源名称。
+- 保存采用“临时文件写入并验证后替换”；启动时可恢复较新的临时草稿。Windows 与 Android 都提供恢复中心，可只读检查损坏文件并另存为抢救副本，原文件保持不变。
+- 读取时会修复空或重复 ID、无效图层引用、非有限墨迹数值及异常录音时间数据。
+- 大墨迹页面使用空间索引；Android 按可见视口绘制并用局部候选执行橡皮命中，避免每帧扫描全部笔迹。
+- 整库备份格式 3 包含笔记、历史版本和音频附件，记录长度与 SHA-256，并在导入前检查重复路径、越界路径、大小和内容完整性。
+- Windows 与 Android 均支持页面级本地录音、播放/暂停、重命名、删除、命名时间标记和书写时自动标记。Windows 使用 WAV，Android 使用 MPEG-4/AAC。
+- 压力测试覆盖 10,000+ 笔迹空间查询，以及 60 页、4,800 笔迹、600 对象、录音标记和图层关系的重复保存往返。
 
-### Scope boundaries
+### 当前明确边界
 
-- OCR and handwriting-recognition result fields are searchable, but the repository does not currently bundle an OCR or recognition engine.
-- Audio timeline and cue data models exist; recording capture and player UI are not yet complete.
-- Accounts, cloud sync, network AI, telemetry, advertising, and multi-user collaboration are intentionally out of scope.
-- APK, ZIP, signing keys, build output, and private notes are release artifacts or local data and are not committed.
+- OCR 和手写识别结果可以保存并搜索，但仓库尚未内置真正的离线 OCR、手写转文字或数学识别引擎。
+- 尚未提供自由形状套索、几何吸附、自动形状识别、标尺和大批量墨迹样式修改。
+- 录音暂不含波形视图、播放时笔迹高亮、麦克风设备选择和压缩质量控制。
+- PDF 尚不含大型文档页面缓存、导入进度/取消、表单编辑、测量和文档内文字搜索。
+- 完整屏幕阅读器语义、高对比度专项适配、加密设置界面和本地插件机制仍待完善。
+- 账号、云同步、联网 AI、遥测、广告和多人协作不在离线版本范围内。
+- APK、ZIP、签名密钥、构建输出和私人笔记属于发布产物或本地数据，不提交到源码仓库。
 
-### Verification
+### 验证入口
 
-```text
-dotnet run --project tests/PaperNote.Core.Tests/PaperNote.Core.Tests.csproj -c Release
-dotnet run --project tests/SmokeTest/SmokeTest.csproj -c Release
-dotnet run --project tests/BackgroundUiTest/BackgroundUiTest.csproj -c Release
-scripts/build-android.ps1
-scripts/test-android.ps1 -SkipUi
+```powershell
+.\scripts\build-android.ps1
+.\scripts\test.ps1 -SkipAndroidRuntime
 ```

@@ -176,6 +176,7 @@
                         <ColumnDefinition Width="116" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Border Width="38" Height="38" Background="{StaticResource AccentBrush}" CornerRadius="12">
@@ -193,7 +194,8 @@
                         <ComboBoxItem Content="标题排序" Tag="Title" />
                     </ComboBox>
                     <Button x:Name="LibraryBackupButton" Grid.Column="3" Style="{StaticResource ToolbarButtonStyle}" Height="42" Margin="0,0,8,0" Click="LibraryBackupActions_Click" ToolTip="导出或恢复整个本地资料库">资料库备份⌄</Button>
-                    <Button Grid.Column="4" Style="{StaticResource PrimaryButtonStyle}" Height="42" Click="NewNotebook_Click">＋ 新建笔记</Button>
+                    <Button x:Name="RecoveryCenterButton" Grid.Column="4" Style="{StaticResource ToolbarButtonStyle}" Height="42" Margin="0,0,8,0" Click="RecoveryCenter_Click" ToolTip="查看未完成草稿和损坏文件">恢复中心</Button>
+                    <Button Grid.Column="5" Style="{StaticResource PrimaryButtonStyle}" Height="42" Click="NewNotebook_Click">＋ 新建笔记</Button>
                 </Grid>
             </Border>
 
@@ -351,6 +353,7 @@
                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="NotebookHistory_Click" ToolTip="查看自动备份、创建版本或恢复旧内容">历史版本</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="ExportInk_Click" ToolTip="导出当前页可编辑笔迹">导出笔迹</Button>
                         <Button x:Name="ExportPdfButton" Style="{StaticResource ToolbarButtonStyle}" Click="ExportPdf_Click" ToolTip="把整本笔记导出为扁平 PDF">导出 PDF</Button>
+                            <Button x:Name="AudioTimelineButton" Style="{StaticResource ToolbarButtonStyle}" Click="AudioActions_Click" ToolTip="本页录音与时间标记">录音</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="PdfPageActions_Click" ToolTip="旋转、裁剪或重置当前 PDF 页面">PDF 页面⌄</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="ToggleReadOnly_Click" ToolTip="只读/编辑模式"><TextBlock x:Name="ReadOnlyButtonText" Text="只读" /></Button>
                     </StackPanel>

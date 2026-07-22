@@ -5,7 +5,7 @@ using PaperNote.Core.Ink;
 
 namespace PaperNote.Core.Services;
 
-public sealed class NotebookStorageService
+public sealed partial class NotebookStorageService
 {
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -180,6 +180,16 @@ public sealed class NotebookStorageService
             .ToList();
 
         document.Pages ??= [];
+        document.Pages = document.Pages.Where(page => page is not null).ToList();
+        var usedPageIds = new HashSet<Guid>();
+        foreach (var page in document.Pages)
+        {
+            if (page.Id == Guid.Empty || !usedPageIds.Add(page.Id))
+            {
+                page.Id = Guid.NewGuid();
+                usedPageIds.Add(page.Id);
+            }
+        }
         foreach (var page in document.Pages)
         {
             page.Title = NormalizePageTitle(page.Title);
@@ -202,17 +212,64 @@ public sealed class NotebookStorageService
             page.OcrText ??= string.Empty;
             page.RecognizedText ??= string.Empty;
             page.Layers ??= [];
-            page.Layers = page.Layers.Where(layer => layer is not null).Select(layer => new PageLayer
+            var usedLayerIds = new HashSet<Guid>();
+            page.Layers = page.Layers.Where(layer => layer is not null).Select(layer =>
             {
-                Id = layer.Id == Guid.Empty ? Guid.NewGuid() : layer.Id,
-                Name = string.IsNullOrWhiteSpace(layer.Name) ? "图层" : layer.Name.Trim()[..Math.Min(layer.Name.Trim().Length, 40)],
-                IsVisible = layer.IsVisible, IsLocked = layer.IsLocked,
-                Opacity = double.IsFinite(layer.Opacity) ? Math.Clamp(layer.Opacity, .1, 1) : 1
+                var id = layer.Id;
+                if (id == Guid.Empty || !usedLayerIds.Add(id))
+                {
+                    id = Guid.NewGuid();
+                    usedLayerIds.Add(id);
+                }
+                var name = string.IsNullOrWhiteSpace(layer.Name) ? "图层" : layer.Name.Trim();
+                return new PageLayer
+                {
+                    Id = id,
+                    Name = name[..Math.Min(name.Length, 40)],
+                    IsVisible = layer.IsVisible,
+                    IsLocked = layer.IsLocked,
+                    Opacity = double.IsFinite(layer.Opacity) ? Math.Clamp(layer.Opacity, .1, 1) : 1
+                };
             }).ToList();
             page.AudioRecordings ??= [];
             page.AudioRecordings = page.AudioRecordings.Where(recording => recording is not null).ToList();
+            var usedRecordingIds = new HashSet<Guid>();
+            foreach (var recording in page.AudioRecordings)
+            {
+                if (recording.Id == Guid.Empty || !usedRecordingIds.Add(recording.Id))
+                {
+                    recording.Id = Guid.NewGuid();
+                    usedRecordingIds.Add(recording.Id);
+                }
+                recording.LocalFilePath = (recording.LocalFilePath ?? string.Empty).Trim();
+                var displayName = string.IsNullOrWhiteSpace(recording.DisplayName) ? "本地录音" : recording.DisplayName.Trim();
+                recording.DisplayName = displayName[..Math.Min(displayName.Length, 80)];
+                recording.DurationMilliseconds = Math.Max(0, recording.DurationMilliseconds);
+                recording.FileSize = Math.Max(0, recording.FileSize);
+                recording.MimeType = string.IsNullOrWhiteSpace(recording.MimeType) ? "audio/mp4" : recording.MimeType.Trim();
+                recording.Cues ??= [];
+                recording.Cues = recording.Cues.Where(cue => cue is not null).ToList();
+                var usedCueIds = new HashSet<Guid>();
+                foreach (var cue in recording.Cues)
+                {
+                    if (cue.Id == Guid.Empty || !usedCueIds.Add(cue.Id))
+                    {
+                        cue.Id = Guid.NewGuid();
+                        usedCueIds.Add(cue.Id);
+                    }
+                    cue.OffsetMilliseconds = Math.Max(0, cue.OffsetMilliseconds);
+                    if (recording.DurationMilliseconds > 0) cue.OffsetMilliseconds = Math.Min(cue.OffsetMilliseconds, recording.DurationMilliseconds);
+                    var label = (cue.Label ?? string.Empty).Trim();
+                    cue.Label = label[..Math.Min(label.Length, 80)];
+                }
+                recording.Cues = recording.Cues.OrderBy(cue => cue.OffsetMilliseconds).ToList();
+            }
             if (page.Layers.Count == 0) page.Layers.Add(new PageLayer());
             page.ActiveLayerId = page.Layers.Any(layer => layer.Id == page.ActiveLayerId) ? page.ActiveLayerId : page.Layers[0].Id;
+            foreach (var stroke in page.Ink.Strokes)
+            {
+                if (stroke.LayerId is Guid layerId && page.Layers.All(layer => layer.Id != layerId)) stroke.LayerId = page.ActiveLayerId;
+            }
             (page.BackgroundCropLeft, page.BackgroundCropRight) = NormalizeCropPair(page.BackgroundCropLeft, page.BackgroundCropRight);
             (page.BackgroundCropTop, page.BackgroundCropBottom) = NormalizeCropPair(page.BackgroundCropTop, page.BackgroundCropBottom);
             if (string.IsNullOrWhiteSpace(page.BackgroundImageData))
@@ -221,8 +278,15 @@ public sealed class NotebookStorageService
                 page.BackgroundCropLeft = page.BackgroundCropTop = page.BackgroundCropRight = page.BackgroundCropBottom = 0;
             }
             page.Objects ??= [];
+            page.Objects = page.Objects.Where(pageObject => pageObject is not null).ToList();
+            var usedObjectIds = new HashSet<Guid>();
             foreach (var pageObject in page.Objects)
             {
+                if (pageObject.Id == Guid.Empty || !usedObjectIds.Add(pageObject.Id))
+                {
+                    pageObject.Id = Guid.NewGuid();
+                    usedObjectIds.Add(pageObject.Id);
+                }
                 NormalizePageObject(pageObject);
                 if (pageObject.LayerId is Guid layerId && page.Layers.All(layer => layer.Id != layerId)) pageObject.LayerId = page.ActiveLayerId;
             }

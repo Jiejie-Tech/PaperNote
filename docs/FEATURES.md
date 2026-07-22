@@ -1,111 +1,119 @@
 # PaperNote 功能清单
 
-> 当前版本：1.0.0 · 数据格式：15 · 平台：Windows、Android
+> 当前版本：1.0.0 · 数据格式：15 · 平台：Windows、Android · 工作方式：离线本地
 
-## 资料库
+## 资料库与可靠性
 
-- 新建、打开、重命名和删除笔记本
-- 最近笔记与标题搜索
-- 回收站恢复和永久删除
-- 本地自动保存
-- 单笔记导入导出
-- 整库备份与恢复
+- 新建、打开、重命名、删除、回收站恢复和永久删除
+- 最近笔记、文件夹、标签、排序和整库本地搜索
+- 自动保存、手动保存、历史版本和单笔记导入导出
+- 整库备份格式 3：包含笔记、历史版本和音频附件，校验长度与 SHA-256
+- 启动时自动恢复较新的临时草稿
+- Windows 与 Android 恢复中心：查看损坏文件、原始片段和可读页，另存抢救副本且保留原文件
+- 空/重复 ID、无效图层引用、非有限墨迹数值和异常录音时间的加载修复
 
 ## 手写与画布
 
-- 钢笔和荧光笔
-- 颜色与粗细调整
-- 整笔橡皮擦
-- 撤销与重做
-- 触控笔压力输入
-- Android 触控笔倾角和橡皮端识别
-- 页面平移与双指缩放
-- 手机端默认手指书写，可在编辑器工具栏或设置中切换
-- PaperInk 跨平台墨迹
+- 钢笔、荧光笔、颜色、粗细和透明度
+- 整笔擦除与局部擦除
+- 撤销、重做、页面平移和双指缩放
+- 触控笔压力、倾角和 Android 橡皮端识别
+- 笔迹平滑、压感曲线和 PaperInk 跨平台墨迹
 - Windows ISF 兼容保留
+- Android 手机默认手指书写，可在工具栏或设置中切换
+- 大墨迹空间索引、Android 可见视口按需渲染和局部橡皮候选筛选
 
-## 页面
+## 选择、对象与图层
 
-- 新增、复制、删除和重命名
-- 缩略图、页码与快速跳转
-- 多种纸张模板
-- 手机底部页面入口
-- 平板和桌面侧栏
+- 矩形套索和多对象选择
+- 移动、缩放、旋转、复制、删除、组合/取消组合、层级顺序和锁定
+- 文本、图片、直线、箭头、矩形、圆形、三角形、菱形、星形和圆角矩形
+- 对象颜色、填充、线宽、透明度和批量样式修改
+- 图层新增、激活、显隐、锁定、透明度、重命名、合并和删除时迁移内容
 
-## 页面对象
+## 页面与模板
 
-- 文本
-- 图片
-- 直线
-- 箭头
-- 矩形
-- 圆形
-- 三角形
-- 菱形
-- 星形
+- 新增、复制、删除、重命名、移动和快速跳转
+- 缩略图、页码、页面搜索和大纲
+- 多种纸张模板、纸张颜色、收藏模板和共享模板
+- 手机底部页面入口，平板与桌面侧栏
 
 ## PDF
 
-- 导入 PDF 为页面背景
-- 在 PDF 页面上书写和添加对象
+- 导入 PDF 为页面背景并选择页码范围和插入位置
+- 在 PDF 页面上书写、添加对象、旋转和裁剪背景
 - 导出包含批注的扁平 PDF
+
+## 本地搜索与文字
+
+- 索引笔记/页面标题、标签、文本对象、来源名称、已存 OCR 文本和已存手写识别文本
+- 文字对象提取和页面/资料库级查找
+- 数据结构已预留 OCR 与手写识别结果，但当前未内置识别引擎
+
+## 本地录音
+
+- Windows 与 Android 页面级录音
+- 播放、暂停、重命名和删除
+- 命名时间标记与书写时自动标记
+- 音频附件跟随整库备份与恢复
 
 ## 平台能力
 
 ### Windows
 
-- 完整 WPF 桌面界面
-- 适配鼠标、触控和数位笔
-- 本地资料库与工作区恢复
-- 隐藏窗口后台 UI 回归测试
+- WPF 桌面界面，适配鼠标、触控和数位笔
+- 本地资料库、工作区恢复和隐藏窗口后台 UI 回归测试
 
 ### Android
 
-- Android 6.0（API 23）及以上
-- 手机和平板响应式布局
-- 原生 MotionEvent 墨迹采集
-- 系统文件选择器导入导出
-- 无 INTERNET 权限
-- 四种 ABI：ARMv7、ARM64、x86、x64
+- Android 6.0（API 23）及以上，手机和平板响应式布局
+- 原生 MotionEvent 墨迹采集和系统文件选择器
+- 无 INTERNET 权限，支持 ARMv7、ARM64、x86、x64
+- 切换后台和页面销毁前保存笔记与录音
 
 ## 暂未包含
 
-- 账号和云同步
-- 多人实时协作
-- OCR 与全文手写识别
-- 音频录制与时间轴
+- 真正的离线 OCR、手写转文字和数学/LaTeX 识别引擎
+- 自由形状套索、标尺、几何吸附和自动形状识别
+- 大型 PDF 页面缓存、导入进度/取消、表单和测量
+- 音频波形、播放时笔迹高亮、录音设备和压缩质量设置
+- 完整无障碍、高对比度、加密设置界面和本地插件机制
+- 账号云同步、多人实时协作、联网 AI、广告和遥测
 - iOS/macOS 客户端
 
 后续方向见 [ROADMAP.md](../ROADMAP.md)。
 
 ## Implementation status — 2026-07-22
 
-This section is the source of truth for the current offline scope.
+本节是当前离线版本能力边界的统一说明。
 
-### Implemented and covered by repository tests
+### 已实现并纳入仓库测试
 
-- Cross-platform PaperInk stores pressure, tilt, smoothing, partial/stroke erasing, opacity, and layer membership.
-- Android supports rectangle lasso, multi-object selection, move, resize, rotate, duplicate, delete, group/ungroup, z-order, lock, and batch style changes.
-- Page layers support create, activate, show/hide, lock, opacity, rename, merge, and delete-with-content-migration. Hidden content remains in the document.
-- Text, image, and shape objects preserve rotation, opacity, lock, hidden, group, and layer fields across serialization.
-- Offline search indexes notebook/page titles, tags, text objects, stored OCR text, stored handwriting-recognition text, and source names.
-- Saving writes and parses a temporary document before replacing the live file. Library backup format 2 records file length and SHA-256 and verifies every entry before import.
-- Notebook format version is 15 and migration preserves legacy ISF/PaperInk and pages created before layers existed.
-- Windows thumbnails and object overlays, plus the Android renderer, honor layer visibility and effective opacity.
+- Windows 与 Android 共用 PaperInk；支持压力、倾角、平滑、整笔/局部擦除、透明度和图层归属。
+- Android 支持矩形套索、多对象选择、移动、缩放、旋转、复制、删除、组合/取消组合、层级顺序、锁定和批量样式修改。
+- 页面图层支持新增、激活、显隐、锁定、透明度、重命名、合并和删除时迁移内容；隐藏内容不会从文件中丢失。
+- 文本、图片和形状对象的旋转、透明度、锁定、隐藏、组合和图层字段可跨平台保存。
+- 离线搜索覆盖笔记/页面标题、标签、文本对象、已存 OCR 文本、已存手写识别文本和来源名称。
+- 保存采用“临时文件写入并验证后替换”；启动时可恢复较新的临时草稿。Windows 与 Android 都提供恢复中心，可只读检查损坏文件并另存为抢救副本，原文件保持不变。
+- 读取时会修复空或重复 ID、无效图层引用、非有限墨迹数值及异常录音时间数据。
+- 大墨迹页面使用空间索引；Android 按可见视口绘制并用局部候选执行橡皮命中，避免每帧扫描全部笔迹。
+- 整库备份格式 3 包含笔记、历史版本和音频附件，记录长度与 SHA-256，并在导入前检查重复路径、越界路径、大小和内容完整性。
+- Windows 与 Android 均支持页面级本地录音、播放/暂停、重命名、删除、命名时间标记和书写时自动标记。Windows 使用 WAV，Android 使用 MPEG-4/AAC。
+- 压力测试覆盖 10,000+ 笔迹空间查询，以及 60 页、4,800 笔迹、600 对象、录音标记和图层关系的重复保存往返。
 
-### Scope boundaries
+### 当前明确边界
 
-- OCR and handwriting-recognition result fields are searchable, but the repository does not currently bundle an OCR or recognition engine.
-- Audio timeline and cue data models exist; recording capture and player UI are not yet complete.
-- Accounts, cloud sync, network AI, telemetry, advertising, and multi-user collaboration are intentionally out of scope.
-- APK, ZIP, signing keys, build output, and private notes are release artifacts or local data and are not committed.
+- OCR 和手写识别结果可以保存并搜索，但仓库尚未内置真正的离线 OCR、手写转文字或数学识别引擎。
+- 尚未提供自由形状套索、几何吸附、自动形状识别、标尺和大批量墨迹样式修改。
+- 录音暂不含波形视图、播放时笔迹高亮、麦克风设备选择和压缩质量控制。
+- PDF 尚不含大型文档页面缓存、导入进度/取消、表单编辑、测量和文档内文字搜索。
+- 完整屏幕阅读器语义、高对比度专项适配、加密设置界面和本地插件机制仍待完善。
+- 账号、云同步、联网 AI、遥测、广告和多人协作不在离线版本范围内。
+- APK、ZIP、签名密钥、构建输出和私人笔记属于发布产物或本地数据，不提交到源码仓库。
 
-### Verification
+### 验证入口
 
-```text
-dotnet run --project tests/PaperNote.Core.Tests/PaperNote.Core.Tests.csproj -c Release
-dotnet run --project tests/SmokeTest/SmokeTest.csproj -c Release
-dotnet run --project tests/BackgroundUiTest/BackgroundUiTest.csproj -c Release
-scripts/build-android.ps1
-scripts/test-android.ps1 -SkipUi
+```powershell
+.\scripts\build-android.ps1
+.\scripts\test.ps1 -SkipAndroidRuntime
 ```

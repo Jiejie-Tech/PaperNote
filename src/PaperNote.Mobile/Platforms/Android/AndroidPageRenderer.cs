@@ -15,7 +15,7 @@ internal static class AndroidPageRenderer
     public const float PageWidth = 840f;
     public const float PageHeight = 1188f;
 
-    public static void DrawPage(Canvas canvas, NotebookPage? page, PaperInkDocument document, Paint paint, Bitmap? background)
+    public static void DrawPage(Canvas canvas, NotebookPage? page, PaperInkDocument document, Paint paint, Bitmap? background, IReadOnlyList<PaperInkStroke>? visibleStrokes = null)
     {
         paint.SetStyle(Paint.Style.Fill);
         paint.Color = ParseColor(page?.PaperColor, AColor.White);
@@ -23,7 +23,7 @@ internal static class AndroidPageRenderer
         canvas.DrawRect(0, 0, PageWidth, PageHeight, paint);
         DrawTemplate(canvas, page?.PaperTemplate, paint);
         if (background is not null && page is not null) DrawBackground(canvas, background, page, paint);
-        DrawStrokes(canvas, page, document, paint);
+        DrawStrokes(canvas, page, visibleStrokes ?? document.Strokes, paint);
         if (page is not null) DrawObjects(canvas, page, paint);
         paint.Alpha = 255;
     }
@@ -91,9 +91,9 @@ internal static class AndroidPageRenderer
         canvas.RestoreToCount(save);
     }
 
-    private static void DrawStrokes(Canvas canvas, NotebookPage? page, PaperInkDocument document, Paint paint)
+    private static void DrawStrokes(Canvas canvas, NotebookPage? page, IReadOnlyList<PaperInkStroke> strokes, Paint paint)
     {
-        foreach (var stroke in document.Strokes)
+        foreach (var stroke in strokes)
         {
             if (stroke.Points.Count == 0 || !PageLayerService.IsContentVisible(page, stroke.LayerId)) continue;
             paint.SetStyle(Paint.Style.Stroke);

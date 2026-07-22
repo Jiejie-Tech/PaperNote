@@ -15,6 +15,10 @@
 - 签名 APK 与 Android 分发压缩包构建脚本、SHA-256 校验、ADB 后台运行测试和完整回归入口。
 - Android 使用、构建和数据格式文档。
 - Windows 与 Android 统一发布指南及完整第三方许可清单。
+- Windows 与 Android 页面级本地录音、播放/暂停、重命名、删除、命名时间标记和书写时自动标记。
+- Windows 与 Android 恢复中心，可查看临时草稿和损坏笔记，并另存为不覆盖原文件的抢救副本。
+- 大墨迹空间索引、Android 视口按需渲染和局部橡皮候选筛选。
+- 60 页、4,800 笔迹、600 对象的重复保存往返压力测试，以及 10,000+ 笔迹空间查询测试。
 
 ### 变更
 
@@ -22,6 +26,8 @@
 - Windows 版改用共享 Core，并同时维护 ISF 与 PaperInk。
 - 数据格式升级到版本 15。
 - 统一 Windows 与 Android 的笔记、备份和跨平台对象模型。
+- 整库备份升级到格式 3，纳入音频附件，并校验路径、长度和 SHA-256。
+- 读取时自动规范化重复/空 ID、无效图层引用、非有限墨迹数值和异常录音时间。
 - Android 安装包内嵌第三方声明、MAUI/Android 依赖许可与 Open Sans 字体许可。
 - 重构产品化仓库首页，新增跨平台主视觉、真实界面展示和下载入口。
 
@@ -37,6 +43,9 @@
 - 修复搜索与资料库页面取消令牌生命周期问题。
 - 修复 Android Shell 子页面系统返回键可能关闭整个 Activity 的问题。
 - 修复资料库根页返回时 MAUI Fragment 销毁阶段可能出现的服务容器释放异常。
+- 修复 Windows 启动恢复状态提示使用未定义变量导致的编译错误。
+- 修复局部橡皮切分笔迹后丢失图层归属的问题。
+- 修复长笔迹跨空间索引网格时可能漏查，以及线段穿过橡皮范围却未命中的问题。
 
 ## [1.0.0] - 2026-07-18
 
@@ -45,32 +54,35 @@
 
 ## Implementation status — 2026-07-22
 
-This section is the source of truth for the current offline scope.
+本节是当前离线版本能力边界的统一说明。
 
-### Implemented and covered by repository tests
+### 已实现并纳入仓库测试
 
-- Cross-platform PaperInk stores pressure, tilt, smoothing, partial/stroke erasing, opacity, and layer membership.
-- Android supports rectangle lasso, multi-object selection, move, resize, rotate, duplicate, delete, group/ungroup, z-order, lock, and batch style changes.
-- Page layers support create, activate, show/hide, lock, opacity, rename, merge, and delete-with-content-migration. Hidden content remains in the document.
-- Text, image, and shape objects preserve rotation, opacity, lock, hidden, group, and layer fields across serialization.
-- Offline search indexes notebook/page titles, tags, text objects, stored OCR text, stored handwriting-recognition text, and source names.
-- Saving writes and parses a temporary document before replacing the live file. Library backup format 2 records file length and SHA-256 and verifies every entry before import.
-- Notebook format version is 15 and migration preserves legacy ISF/PaperInk and pages created before layers existed.
-- Windows thumbnails and object overlays, plus the Android renderer, honor layer visibility and effective opacity.
+- Windows 与 Android 共用 PaperInk；支持压力、倾角、平滑、整笔/局部擦除、透明度和图层归属。
+- Android 支持矩形套索、多对象选择、移动、缩放、旋转、复制、删除、组合/取消组合、层级顺序、锁定和批量样式修改。
+- 页面图层支持新增、激活、显隐、锁定、透明度、重命名、合并和删除时迁移内容；隐藏内容不会从文件中丢失。
+- 文本、图片和形状对象的旋转、透明度、锁定、隐藏、组合和图层字段可跨平台保存。
+- 离线搜索覆盖笔记/页面标题、标签、文本对象、已存 OCR 文本、已存手写识别文本和来源名称。
+- 保存采用“临时文件写入并验证后替换”；启动时可恢复较新的临时草稿。Windows 与 Android 都提供恢复中心，可只读检查损坏文件并另存为抢救副本，原文件保持不变。
+- 读取时会修复空或重复 ID、无效图层引用、非有限墨迹数值及异常录音时间数据。
+- 大墨迹页面使用空间索引；Android 按可见视口绘制并用局部候选执行橡皮命中，避免每帧扫描全部笔迹。
+- 整库备份格式 3 包含笔记、历史版本和音频附件，记录长度与 SHA-256，并在导入前检查重复路径、越界路径、大小和内容完整性。
+- Windows 与 Android 均支持页面级本地录音、播放/暂停、重命名、删除、命名时间标记和书写时自动标记。Windows 使用 WAV，Android 使用 MPEG-4/AAC。
+- 压力测试覆盖 10,000+ 笔迹空间查询，以及 60 页、4,800 笔迹、600 对象、录音标记和图层关系的重复保存往返。
 
-### Scope boundaries
+### 当前明确边界
 
-- OCR and handwriting-recognition result fields are searchable, but the repository does not currently bundle an OCR or recognition engine.
-- Audio timeline and cue data models exist; recording capture and player UI are not yet complete.
-- Accounts, cloud sync, network AI, telemetry, advertising, and multi-user collaboration are intentionally out of scope.
-- APK, ZIP, signing keys, build output, and private notes are release artifacts or local data and are not committed.
+- OCR 和手写识别结果可以保存并搜索，但仓库尚未内置真正的离线 OCR、手写转文字或数学识别引擎。
+- 尚未提供自由形状套索、几何吸附、自动形状识别、标尺和大批量墨迹样式修改。
+- 录音暂不含波形视图、播放时笔迹高亮、麦克风设备选择和压缩质量控制。
+- PDF 尚不含大型文档页面缓存、导入进度/取消、表单编辑、测量和文档内文字搜索。
+- 完整屏幕阅读器语义、高对比度专项适配、加密设置界面和本地插件机制仍待完善。
+- 账号、云同步、联网 AI、遥测、广告和多人协作不在离线版本范围内。
+- APK、ZIP、签名密钥、构建输出和私人笔记属于发布产物或本地数据，不提交到源码仓库。
 
-### Verification
+### 验证入口
 
-```text
-dotnet run --project tests/PaperNote.Core.Tests/PaperNote.Core.Tests.csproj -c Release
-dotnet run --project tests/SmokeTest/SmokeTest.csproj -c Release
-dotnet run --project tests/BackgroundUiTest/BackgroundUiTest.csproj -c Release
-scripts/build-android.ps1
-scripts/test-android.ps1 -SkipUi
+```powershell
+.\scripts\build-android.ps1
+.\scripts\test.ps1 -SkipAndroidRuntime
 ```

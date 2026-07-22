@@ -18,12 +18,15 @@ public sealed class AudioRecording
     public string DisplayName { get; set; } = "本地录音";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
     public long DurationMilliseconds { get; set; }
+    public long FileSize { get; set; }
+    public string MimeType { get; set; } = "audio/mp4";
     public List<AudioCue> Cues { get; set; } = [];
 
     public AudioRecording Clone() => new()
     {
         Id = Id, LocalFilePath = LocalFilePath, DisplayName = DisplayName, CreatedAt = CreatedAt,
-        DurationMilliseconds = DurationMilliseconds, Cues = Cues.Select(cue => cue.Clone()).ToList()
+        DurationMilliseconds = DurationMilliseconds, FileSize = FileSize, MimeType = MimeType,
+        Cues = Cues.Select(cue => cue.Clone()).ToList()
     };
 }
 

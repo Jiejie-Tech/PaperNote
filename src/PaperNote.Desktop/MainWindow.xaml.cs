@@ -98,6 +98,11 @@ public partial class MainWindow : Window
         try
         {
             LibraryStatusText.Text = "正在读取本机笔记本…";
+            var recoveryResults = await _notebookStorage.RecoverTemporaryDraftsAsync();
+            var recoveryCandidates = await _notebookStorage.InspectRecoveryAsync();
+            var recoveredCount = recoveryResults.Count(item => item.Recovered);
+            var damagedCount = recoveryCandidates.Count(item => item.Kind == NotebookRecoveryKind.CorruptedNotebook || !item.IsReadable);
+            var recoverySuffix = recoveredCount > 0 ? $" · 已恢复 {recoveredCount} 份草稿" : damagedCount > 0 ? $" · {damagedCount} 个文件待抢救" : string.Empty;
             await RefreshLibraryAsync();
             if (_isCloseRequested || _isClosed) return;
             if (_storedNotebooks.All(item => item.Document.IsInTrash))
@@ -109,11 +114,11 @@ public partial class MainWindow : Window
                 await _notebookStorage.CreateAsync(NotebookDocument.Create(title, inkData));
                 if (_isCloseRequested || _isClosed) return;
                 await RefreshLibraryAsync();
-                LibraryStatusText.Text = legacyStrokes.Count > 0 ? "已把旧版快速笔记迁移到新笔记本" : "已创建默认笔记本 · 内容只保存在本机";
+                LibraryStatusText.Text = (legacyStrokes.Count > 0 ? "已把旧版快速笔记迁移到新笔记本" : "已创建默认笔记本 · 内容只保存在本机") + recoverySuffix;
             }
             else
             {
-                LibraryStatusText.Text = $"共 {_notebookCards.Count} 本 · 内容只保存在本机";
+                LibraryStatusText.Text = $"共 {_notebookCards.Count} 本 · 内容只保存在本机{recoverySuffix}";
             }
             if (_isCloseRequested || _isClosed) return;
             await RestoreWorkspaceStateAsync();
@@ -500,6 +505,7 @@ public partial class MainWindow : Window
 
     private void LoadPage(NotebookPage page)
     {
+        if (_currentPage is not null && !ReferenceEquals(_currentPage, page)) StopAudioForContextChange();
         _isSwitchingPage = true;
         try
         {
@@ -795,6 +801,7 @@ public partial class MainWindow : Window
     {
         if (_isRestoring || _isSwitchingPage) return;
         StatusText.Text = $"{_activeToolDisplayName()} · {InkSurface.Strokes.Count} 条笔迹";
+        RecordActiveAudioCueForInk(e.Added);
         MarkDirty();
     }
 
@@ -1188,6 +1195,7 @@ public partial class MainWindow : Window
 
     private async Task PrepareForCloseAsync()
     {
+        StopAudioForContextChange();
         _autosaveTimer.Stop();
         await SaveNotebookAsync();
         if (!IsLoaded) return;
@@ -1207,6 +1215,7 @@ public partial class MainWindow : Window
         _isClosed = true;
         _autosaveTimer.Stop();
         _autosaveTimer.Tick -= AutosaveTimer_Tick;
+        ShutdownDesktopAudio();
         if (_observedStrokes is not null)
         {
             _observedStrokes.StrokesChanged -= Strokes_StrokesChanged;

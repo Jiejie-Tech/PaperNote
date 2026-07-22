@@ -80,6 +80,7 @@ internal static class Program
             SetField(window, "_currentPage", page);
             Invoke(window, "LoadPage", page);
 
+            Assert(window.FindName("RecoveryCenterButton") is Button, "The library should expose the recovery center.");
             var objectLayer = (Canvas)(window.FindName("ObjectLayer") ?? throw new InvalidOperationException("找不到隐藏对象画布。"));
             var backgroundImage = (Image)(window.FindName("PageBackgroundImage") ?? throw new InvalidOperationException("Missing background image layer."));
             Assert(backgroundImage.Source is BitmapSource, "PDF page background should load without showing a window.");
@@ -748,7 +749,7 @@ internal static class Program
             Assert(File.Exists(closeWorkspacePath), "Window close should persist workspace state without blocking the UI thread.");
 
             Console.WriteLine("BACKGROUND WPF UI TEST PASS");
-            Console.WriteLine("隐藏 WPF 的整库搜索、文字提取、更多形状、可见标签条、书架排序、资料库备份入口、共享模板、多笔型、压感曲线、笔迹平滑、PDF 工具、页面导航、数据容错，以及异步关闭保存均通过");
+            Console.WriteLine("隐藏 WPF 的恢复中心、整库搜索、文字提取、更多形状、可见标签条、书架排序、资料库备份入口、共享模板、多笔型、压感曲线、笔迹平滑、PDF 工具、页面导航、数据容错，以及异步关闭保存均通过");
         }
         finally
         {
@@ -901,13 +902,3 @@ internal static class Program
         if (!condition) throw new InvalidOperationException(message);
     }
 }
-
-
-
-
-
-
-
-
-
-

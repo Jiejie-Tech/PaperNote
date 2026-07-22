@@ -20,12 +20,16 @@ public sealed class MobileNotebookRepository
     public PaperTemplateLibraryService TemplateLibrary { get; }
     public IReadOnlyList<StoredNotebook> Notebooks { get; private set; } = [];
     public StoredNotebook? Current { get; private set; }
+    public IReadOnlyList<NotebookRecoveryResult> LastRecoveryResults { get; private set; } = [];
+    public IReadOnlyList<NotebookRecoveryCandidate> RecoveryCandidates { get; private set; } = [];
 
     public event EventHandler? LibraryChanged;
     public event EventHandler? CurrentChanged;
 
     public async Task<IReadOnlyList<StoredNotebook>> RefreshAsync(string? query = null, bool includeTrash = false, CancellationToken cancellationToken = default)
     {
+        LastRecoveryResults = await Storage.RecoverTemporaryDraftsAsync(cancellationToken);
+        RecoveryCandidates = await Storage.InspectRecoveryAsync(cancellationToken);
         var all = await Storage.ListAsync(cancellationToken);
         Notebooks = all
             .Where(item => includeTrash ? item.Document.IsInTrash : !item.Document.IsInTrash)

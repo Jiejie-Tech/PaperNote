@@ -12,8 +12,17 @@ function Get-PaperNoteAndroidEnvironment {
         throw "PaperNote requires .NET SDK $requiredSdk, but '$actualSdk' is active."
     }
 
-    $workloads = (& dotnet workload list 2>&1 | Out-String)
-    if ($LASTEXITCODE -ne 0 -or $workloads -notmatch '(?im)^\s*(maui-android|android)\s') {
+    # Some dotnet SDK builds write harmless workload update notices to stderr.
+    # Capture the combined output without allowing PowerShell's Stop policy to turn those notices into failures.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $workloads = (& dotnet workload list 2>&1 | Out-String)
+        $workloadExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($workloadExitCode -ne 0 -or $workloads -notmatch '(?im)^\s*(maui-android|android)\s') {
         throw 'The .NET Android workload is not installed. Run: dotnet workload install maui-android'
     }
 

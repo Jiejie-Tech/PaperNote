@@ -127,6 +127,45 @@ public sealed class LibraryPage : ContentPage
         catch (Exception exception) { await ShowErrorAsync("导入失败", exception); }
     }
 
+    private async void Recovery_Clicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            await RefreshAsync(_search.Text);
+            var candidates = _repository.RecoveryCandidates;
+            if (candidates.Count == 0)
+            {
+                await DisplayAlertAsync("恢复中心", "没有发现待抢救的草稿或损坏笔记。", "知道了");
+                return;
+            }
+
+            var labels = candidates.Select((candidate, index) =>
+                $"{index + 1}. {(candidate.Kind == PaperNote.Core.Services.NotebookRecoveryKind.TemporaryDraft ? "草稿" : "损坏文件")} · {candidate.DisplayName}").ToArray();
+            var choice = await DisplayActionSheetAsync("选择待抢救文件", "取消", null, labels);
+            var selectedIndex = Array.IndexOf(labels, choice);
+            if (selectedIndex < 0) return;
+
+            var selected = candidates[selectedIndex];
+            var recovery = await _repository.Storage.ReadForRecoveryAsync(selected.FilePath);
+            var warning = string.IsNullOrWhiteSpace(recovery.Error) ? string.Empty : $"\n\n诊断：{recovery.Error}";
+            if (!recovery.IsReadable || recovery.Document is null)
+            {
+                var preview = string.IsNullOrWhiteSpace(recovery.RawPreview)
+                    ? "（没有可显示的原始文本）"
+                    : recovery.RawPreview[..Math.Min(800, recovery.RawPreview.Length)];
+                await DisplayAlertAsync("只读抢救", $"文件无法还原为可编辑笔记，但原文件会继续保留。{warning}\n\n{preview}", "知道了");
+                return;
+            }
+
+            var save = await DisplayAlertAsync("只读抢救", $"已读取“{recovery.Document.Title}”，共 {recovery.Document.Pages.Count} 页。{warning}\n\n另存为新笔记本？原文件不会被覆盖或删除。", "另存副本", "取消");
+            if (!save) return;
+            var stored = await _repository.Storage.SaveRecoveryCopyAsync(selected.FilePath);
+            await RefreshAsync(_search.Text);
+            await DisplayAlertAsync("抢救完成", $"已创建“{stored.Document.Title}”。", "知道了");
+        }
+        catch (Exception exception) { await ShowErrorAsync("抢救失败", exception); }
+    }
+
     private async void Collection_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (e.CurrentSelection.FirstOrDefault() is not NotebookCard card) return;
@@ -164,7 +203,10 @@ public sealed class LibraryPage : ContentPage
             var notebooks = await _repository.RefreshAsync(query, cancellationToken: cancellationToken);
             _cards.Clear();
             foreach (var notebook in notebooks) _cards.Add(new NotebookCard { Stored = notebook });
-            _summary.Text = string.IsNullOrWhiteSpace(query) ? $"{_cards.Count} 本笔记 · 本地保存" : $"找到 {_cards.Count} 本笔记";
+            var recovered = _repository.LastRecoveryResults.Count(item => item.Recovered);
+            var damaged = _repository.RecoveryCandidates.Count(item => item.Kind == PaperNote.Core.Services.NotebookRecoveryKind.CorruptedNotebook || !item.IsReadable);
+            var recoverySuffix = recovered > 0 ? $" · 已恢复 {recovered} 份草稿" : damaged > 0 ? $" · {damaged} 个文件待抢救" : string.Empty;
+            _summary.Text = (string.IsNullOrWhiteSpace(query) ? $"{_cards.Count} 本笔记 · 本地保存" : $"找到 {_cards.Count} 本笔记") + recoverySuffix;
         }
         catch (OperationCanceledException) { }
         catch (Exception exception) { await ShowErrorAsync("读取失败", exception); }

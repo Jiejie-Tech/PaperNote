@@ -6,14 +6,39 @@ namespace PaperNote.Core.Services;
 public static class InkEditingService
 {
     public static int ErasePartial(PaperInkDocument document, double x, double y, double radius)
+        => ErasePartialDetailed(document, x, y, radius).ChangedCount;
+
+    /// <summary>Erases only the supplied candidate strokes and reports replacements for incremental indexes.</summary>
+    public static InkEraseResult ErasePartialDetailed(
+        PaperInkDocument document,
+        double x,
+        double y,
+        double radius,
+        IReadOnlyCollection<PaperInkStroke>? candidates = null)
     {
         ArgumentNullException.ThrowIfNull(document);
-        if (!double.IsFinite(x) || !double.IsFinite(y) || !double.IsFinite(radius) || radius <= 0) return 0;
+        if (!double.IsFinite(x) || !double.IsFinite(y) || !double.IsFinite(radius) || radius <= 0)
+            return InkEraseResult.Empty;
+
+        var candidateSet = candidates is null
+            ? null
+            : new HashSet<PaperInkStroke>(candidates, ReferenceEqualityComparer.Instance);
         var output = new List<PaperInkStroke>(document.Strokes.Count);
+        var removed = new List<PaperInkStroke>();
+        var added = new List<PaperInkStroke>();
         var changed = 0;
         foreach (var stroke in document.Strokes)
         {
-            if (stroke.Points.Count == 0) continue;
+            if (candidateSet is not null && !candidateSet.Contains(stroke))
+            {
+                output.Add(stroke);
+                continue;
+            }
+            if (stroke.Points.Count == 0)
+            {
+                output.Add(stroke);
+                continue;
+            }
             var fragments = SplitOutsideCircle(stroke, x, y, radius);
             if (fragments.Count == 1 && fragments[0].Points.Count == stroke.Points.Count)
             {
@@ -21,10 +46,12 @@ public static class InkEditingService
                 continue;
             }
             changed++;
+            removed.Add(stroke);
+            added.AddRange(fragments.Where(fragment => fragment.Points.Count >= 2));
             output.AddRange(fragments.Where(fragment => fragment.Points.Count >= 2));
         }
         if (changed > 0) document.Strokes = output;
-        return changed;
+        return new InkEraseResult(changed, removed, added);
     }
 
     public static bool SmoothStroke(PaperInkStroke stroke, double strength = .45)
@@ -88,6 +115,14 @@ public static class InkEditingService
         => new()
         {
             Id = Guid.NewGuid(), Tool = source.Tool, Color = source.Color, Width = source.Width,
-            Opacity = source.Opacity, PressureEnabled = source.PressureEnabled, Points = points
+            Opacity = source.Opacity, PressureEnabled = source.PressureEnabled, LayerId = source.LayerId, Points = points
         };
+}
+
+public sealed record InkEraseResult(
+    int ChangedCount,
+    IReadOnlyList<PaperInkStroke> RemovedStrokes,
+    IReadOnlyList<PaperInkStroke> AddedStrokes)
+{
+    public static InkEraseResult Empty { get; } = new(0, [], []);
 }

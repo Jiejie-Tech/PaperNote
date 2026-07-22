@@ -34,6 +34,14 @@ public sealed class EditorPage : ContentPage
     private double _penWidth = 3.2;
     private double _highlighterWidth = 18;
     private string _color = "#1D2530";
+    private readonly MobileAudioService _audio = new();
+    private readonly IDispatcherTimer _audioTimer;
+    private readonly Button _audioButton;
+    private AudioRecording? _activeRecording;
+    private AudioRecording? _playingRecording;
+    private long _lastAutomaticAudioCue;
+    private long _lastPresentedAudioCue = -1;
+    private Window? _lifecycleWindow;
 
     public EditorPage(MobileNotebookRepository repository, MobileTransferService transfer, AndroidPdfService pdf)
     {
@@ -68,6 +76,9 @@ public sealed class EditorPage : ContentPage
         _canvas.InkChanged += Canvas_InkChanged;
         _canvas.HistoryChanged += (_, _) => UpdateHistory();
         _canvas.SelectionChanged += (_, _) => UpdatePageStatus();
+        _audioTimer = Dispatcher.CreateTimer();
+        _audioTimer.Interval = TimeSpan.FromMilliseconds(250);
+        _audioTimer.Tick += AudioTimer_Tick;
 
         var toolRow = CreateToolbarRow(5);
         AddTool(toolRow, InkCanvasTool.Pen, "钢笔", 0);
@@ -139,6 +150,9 @@ public sealed class EditorPage : ContentPage
         bottomButtons.Add(UiTheme.Button("页面", Pages_Clicked));
         bottomButtons.Add(UiTheme.Button("＋ 新页", AddPage_Clicked, primary: true));
         bottomButtons.Add(UiTheme.Button("PDF", Pdf_Clicked));
+        _audioButton = UiTheme.Button("录音", Audio_Clicked);
+        _audioButton.AutomationId = "AudioTimelineButton";
+        bottomButtons.Add(_audioButton);
         var bottom = new Grid { Padding = new Thickness(10, 7, 10, 10), ZIndex = 20, ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) }, BackgroundColor = UiTheme.Surface };
         bottom.Add(_pageStatus); bottom.Add(bottomButtons, 1);
 
@@ -156,6 +170,7 @@ public sealed class EditorPage : ContentPage
     {
         base.OnAppearing();
         if (_repository.Current is null) { _ = Navigation.PopAsync(); return; }
+        AttachLifecycleEvents();
         _canvas.FingerDrawingEnabled = Preferences.Default.Get("FingerDrawing", true);
         UpdateFingerDrawingButton();
         LoadNotebook();
@@ -164,7 +179,46 @@ public sealed class EditorPage : ContentPage
     protected override async void OnDisappearing()
     {
         base.OnDisappearing();
+        DetachLifecycleEvents();
         CancelPendingSave();
+        StopActiveRecording();
+        _audio.StopPlayback();
+        _audioTimer.Stop();
+        try { await _repository.SaveCurrentAsync(); } catch { }
+    }
+
+    private void AttachLifecycleEvents()
+    {
+        if (_lifecycleWindow is not null || Window is null) return;
+        _lifecycleWindow = Window;
+        _lifecycleWindow.Stopped += AppWindow_Stopped;
+        _lifecycleWindow.Destroying += AppWindow_Destroying;
+    }
+
+    private void DetachLifecycleEvents()
+    {
+        if (_lifecycleWindow is null) return;
+        _lifecycleWindow.Stopped -= AppWindow_Stopped;
+        _lifecycleWindow.Destroying -= AppWindow_Destroying;
+        _lifecycleWindow = null;
+    }
+
+    private async void AppWindow_Stopped(object? sender, EventArgs e)
+    {
+        await SaveForLifecycleChangeAsync();
+    }
+
+    private async void AppWindow_Destroying(object? sender, EventArgs e)
+    {
+        await SaveForLifecycleChangeAsync();
+    }
+
+    private async Task SaveForLifecycleChangeAsync()
+    {
+        CancelPendingSave();
+        StopActiveRecording();
+        _audio.StopPlayback();
+        _audioTimer.Stop();
         try { await _repository.SaveCurrentAsync(); } catch { }
     }
 
@@ -181,6 +235,12 @@ public sealed class EditorPage : ContentPage
 
     private void LoadPage(NotebookPage page)
     {
+        if (_page is not null && _page.Id != page.Id)
+        {
+            StopActiveRecording();
+            _audio.StopPlayback();
+            _playingRecording = null;
+        }
         _page = page;
         _repository.Current!.Document.CurrentPageId = page.Id;
         _canvas.Page = page;
@@ -278,8 +338,9 @@ public sealed class EditorPage : ContentPage
         if (_page is null || _repository.Current is null) return;
         var index = _repository.Current.Document.Pages.IndexOf(_page);
         if (index < 0) return;
-        var selected = _canvas.SelectedObjectId.HasValue ? " · 已选对象" : string.Empty;
-        _pageStatus.Text = $"{index + 1}/{_repository.Current.Document.Pages.Count} 页 · {(_canvas.FingerDrawingEnabled ? "手写开" : "手写关")}{selected}";
+        var selected = _canvas.SelectedObjectCount > 0 ? $" · 已选 {_canvas.SelectedObjectCount} 个对象" : string.Empty;
+        var audio = _activeRecording is not null ? " · 正在录音" : _page.AudioRecordings.Count > 0 ? $" · {_page.AudioRecordings.Count} 段录音" : string.Empty;
+        _pageStatus.Text = $"{index + 1}/{_repository.Current.Document.Pages.Count} 页 · {(_canvas.FingerDrawingEnabled ? "手写开" : "手写关")}{selected}{audio}";
     }
 
     private async void Opacity_Clicked(object? sender, EventArgs e)
@@ -317,6 +378,17 @@ public sealed class EditorPage : ContentPage
     {
         if (_page is null) return;
         _page.ModifiedAt = DateTimeOffset.Now;
+        if (_activeRecording is not null)
+        {
+            var elapsed = _audio.RecordingElapsedMilliseconds;
+            if (elapsed - _lastAutomaticAudioCue >= 500)
+            {
+                _activeRecording.DurationMilliseconds = elapsed;
+                var strokeId = _page.Ink.Strokes.LastOrDefault()?.Id;
+                AudioTimelineService.AddCue(_activeRecording, elapsed, strokeId, "书写");
+                _lastAutomaticAudioCue = elapsed;
+            }
+        }
         ScheduleSave();
         RefreshPageCards();
     }
@@ -378,7 +450,7 @@ public sealed class EditorPage : ContentPage
             actions.Add(selectedItems.All(item => item.IsLocked) ? "\u89e3\u9501\u9009\u4e2d\u5bf9\u8c61" : "\u9501\u5b9a\u9009\u4e2d\u5bf9\u8c61");
             actions.Add("\u5220\u9664\u9009\u4e2d\u5bf9\u8c61");
         }
-        actions.AddRange(["\u56fe\u5c42", "\u7eb8\u5f20\u8bbe\u7f6e", "\u9002\u5408\u5c4f\u5e55", "\u6e05\u7a7a\u5f53\u524d\u9875\u58a8\u8ff9", "\u91cd\u547d\u540d\u5f53\u524d\u9875", "\u6dfb\u52a0\u6587\u5b57", "\u6dfb\u52a0\u5f62\u72b6", "\u590d\u5236\u5f53\u524d\u9875", "\u5220\u9664\u5f53\u524d\u9875", "\u5bfc\u51fa\u7b14\u8bb0\u672c", "\u79fb\u5230\u56de\u6536\u7ad9"]);
+        actions.AddRange(["录音时间轴", "\u56fe\u5c42", "\u7eb8\u5f20\u8bbe\u7f6e", "\u9002\u5408\u5c4f\u5e55", "\u6e05\u7a7a\u5f53\u524d\u9875\u58a8\u8ff9", "\u91cd\u547d\u540d\u5f53\u524d\u9875", "\u6dfb\u52a0\u6587\u5b57", "\u6dfb\u52a0\u5f62\u72b6", "\u590d\u5236\u5f53\u524d\u9875", "\u5220\u9664\u5f53\u524d\u9875", "\u5bfc\u51fa\u7b14\u8bb0\u672c", "\u79fb\u5230\u56de\u6536\u7ad9"]);
 
         var choice = await DisplayActionSheetAsync("\u7b14\u8bb0\u672c\u64cd\u4f5c", "\u53d6\u6d88", null, actions.ToArray());
         switch (choice)
@@ -407,6 +479,7 @@ public sealed class EditorPage : ContentPage
             case "\u5220\u9664\u9009\u4e2d\u5bf9\u8c61":
                 if (await DisplayAlertAsync("\u5220\u9664\u5bf9\u8c61", "\u786e\u5b9a\u5220\u9664\u5f53\u524d\u9009\u4e2d\u7684\u5bf9\u8c61\u5417\uff1f", "\u5220\u9664", "\u53d6\u6d88")) _canvas.DeleteSelection();
                 break;
+            case "录音时间轴": await ShowAudioTimelineAsync(); break;
             case "\u56fe\u5c42": await ShowLayerMenuAsync(); break;
             case "\u7eb8\u5f20\u8bbe\u7f6e": Template_Clicked(sender, e); break;
             case "\u9002\u5408\u5c4f\u5e55": _canvas.ResetViewport(); break;
@@ -438,6 +511,257 @@ public sealed class EditorPage : ContentPage
                 if (await DisplayAlertAsync("\u79fb\u5230\u56de\u6536\u7ad9", "\u7b14\u8bb0\u672c\u53ef\u901a\u8fc7\u684c\u9762\u7248\u6216\u5907\u4efd\u6062\u590d\u3002", "\u79fb\u9664", "\u53d6\u6d88"))
                 { await _repository.MoveCurrentToTrashAsync(); await Navigation.PopAsync(); }
                 break;
+        }
+    }
+
+    private async void Audio_Clicked(object? sender, EventArgs e) => await ShowAudioTimelineAsync();
+
+    private async Task ShowAudioTimelineAsync()
+    {
+        if (_page is null || _repository.Current is null) return;
+        var actions = new List<string>();
+        actions.Add(_activeRecording is null ? "开始录音" : "停止录音");
+        if (_page.AudioRecordings.Count > 0)
+        {
+            actions.Add("播放录音");
+            if (_audio.HasPlayback) actions.Add(_audio.IsPlaying ? "暂停播放" : "继续播放");
+            if (_audio.HasPlayback) actions.Add("停止播放");
+            if (_activeRecording is not null || _audio.HasPlayback) actions.Add("添加时间标记");
+            actions.Add("跳转到时间标记");
+            actions.Add("重命名录音");
+            actions.Add("删除录音");
+        }
+
+        var choice = await DisplayActionSheetAsync("录音与笔迹时间轴", "取消", null, actions.ToArray());
+        try
+        {
+            switch (choice)
+            {
+                case "开始录音": await StartAudioRecordingAsync(); break;
+                case "停止录音": StopActiveRecording(); break;
+                case "播放录音":
+                    var recording = await ChooseRecordingAsync("选择要播放的录音");
+                    if (recording is not null) PlayRecording(recording);
+                    break;
+                case "暂停播放":
+                case "继续播放": _audio.PauseOrResume(); break;
+                case "停止播放": StopAudioPlayback(); break;
+                case "添加时间标记": await AddAudioCueAsync(); break;
+                case "跳转到时间标记": await JumpToAudioCueAsync(); break;
+                case "重命名录音": await RenameRecordingAsync(); break;
+                case "删除录音": await DeleteRecordingAsync(); break;
+            }
+        }
+        catch (Exception exception)
+        {
+            await DisplayAlertAsync("录音操作失败", exception.Message, "知道了");
+        }
+        UpdateAudioButton();
+        UpdatePageStatus();
+    }
+
+    private async Task StartAudioRecordingAsync()
+    {
+        if (_page is null || _repository.Current is null || _activeRecording is not null) return;
+        if (!await _audio.EnsurePermissionAsync())
+        {
+            await DisplayAlertAsync("需要麦克风权限", "请允许 PaperNote 使用麦克风，录音只保存在本机。", "知道了");
+            return;
+        }
+
+        StopAudioPlayback();
+        var notebook = _repository.Current.Document;
+        var recordingId = Guid.NewGuid();
+        var path = AudioAttachmentService.PrepareRecordingPath(_repository.Storage.NotebooksDirectory, notebook.Id, _page.Id, recordingId, ".m4a");
+        var storedPath = AudioAttachmentService.ToStoredPath(_repository.Storage.NotebooksDirectory, path);
+        var recording = new AudioRecording
+        {
+            Id = recordingId,
+            LocalFilePath = storedPath,
+            DisplayName = $"录音 {_page.AudioRecordings.Count + 1}",
+            MimeType = "audio/mp4"
+        };
+        _page.AudioRecordings.Add(recording);
+        try
+        {
+            _audio.StartRecording(path);
+            _activeRecording = recording;
+            _lastAutomaticAudioCue = 0;
+            _lastPresentedAudioCue = -1;
+            _audioTimer.Start();
+            ScheduleSave();
+        }
+        catch
+        {
+            _page.AudioRecordings.Remove(recording);
+            AudioAttachmentService.TryDelete(_repository.Storage.NotebooksDirectory, storedPath);
+            throw;
+        }
+    }
+
+    private void StopActiveRecording()
+    {
+        var recording = _activeRecording;
+        if (recording is null) return;
+        _activeRecording = null;
+        try
+        {
+            var duration = _audio.StopRecording();
+            var path = AudioAttachmentService.ResolvePath(_repository.Storage.NotebooksDirectory, recording.LocalFilePath);
+            var fileSize = File.Exists(path) ? new FileInfo(path).Length : 0;
+            if (duration < 300 || fileSize == 0)
+            {
+                _page?.AudioRecordings.Remove(recording);
+                AudioAttachmentService.TryDelete(_repository.Storage.NotebooksDirectory, recording.LocalFilePath);
+            }
+            else
+            {
+                AudioTimelineService.UpdateRecording(recording, duration, fileSize);
+                if (recording.Cues.Count == 0) AudioTimelineService.AddCue(recording, 0, label: "开始");
+            }
+        }
+        catch
+        {
+            _audio.CancelRecording();
+            _page?.AudioRecordings.Remove(recording);
+            AudioAttachmentService.TryDelete(_repository.Storage.NotebooksDirectory, recording.LocalFilePath);
+        }
+        ScheduleSave();
+        UpdateAudioButton();
+        UpdatePageStatus();
+    }
+
+    private void PlayRecording(AudioRecording recording, long startMilliseconds = 0)
+    {
+        StopActiveRecording();
+        var path = AudioAttachmentService.ResolvePath(_repository.Storage.NotebooksDirectory, recording.LocalFilePath);
+        _audio.Play(path, startMilliseconds);
+        _playingRecording = recording;
+        _lastPresentedAudioCue = -1;
+        _audioTimer.Start();
+        UpdateAudioButton();
+    }
+
+    private void StopAudioPlayback()
+    {
+        _audio.StopPlayback();
+        _playingRecording = null;
+        _lastPresentedAudioCue = -1;
+        if (_activeRecording is null) _audioTimer.Stop();
+        UpdateAudioButton();
+    }
+
+    private async Task<AudioRecording?> ChooseRecordingAsync(string title)
+    {
+        if (_page is null || _page.AudioRecordings.Count == 0) return null;
+        var labels = _page.AudioRecordings
+            .Select((recording, index) => $"{index + 1}. {recording.DisplayName} · {AudioTimelineService.FormatDuration(recording.DurationMilliseconds)}")
+            .ToArray();
+        var choice = await DisplayActionSheetAsync(title, "取消", null, labels);
+        var selectedIndex = Array.IndexOf(labels, choice);
+        return selectedIndex >= 0 ? _page.AudioRecordings[selectedIndex] : null;
+    }
+
+    private async Task AddAudioCueAsync()
+    {
+        if (_page is null) return;
+        var recording = _activeRecording ?? _playingRecording;
+        if (recording is null) return;
+        var offset = _activeRecording is not null ? _audio.RecordingElapsedMilliseconds : _audio.PlaybackPositionMilliseconds;
+        if (_activeRecording is not null) recording.DurationMilliseconds = Math.Max(recording.DurationMilliseconds, offset);
+        var label = await DisplayPromptAsync("添加时间标记", "标记名称", initialValue: "重点", maxLength: 40);
+        if (label is null) return;
+        var strokeId = _page.Ink.Strokes.LastOrDefault()?.Id;
+        if (AudioTimelineService.AddCue(recording, offset, strokeId, label)) ScheduleSave();
+    }
+
+    private async Task JumpToAudioCueAsync()
+    {
+        var recording = _playingRecording ?? await ChooseRecordingAsync("选择录音");
+        if (recording is null || recording.Cues.Count == 0)
+        {
+            await DisplayAlertAsync("没有时间标记", "请在录音或播放过程中添加标记。", "知道了");
+            return;
+        }
+        var labels = recording.Cues.Select((cue, index) => $"{index + 1}. {AudioTimelineService.FormatDuration(cue.OffsetMilliseconds)} · {(string.IsNullOrWhiteSpace(cue.Label) ? "时间标记" : cue.Label)}").ToArray();
+        var choice = await DisplayActionSheetAsync("跳转时间标记", "取消", null, labels);
+        var index = Array.IndexOf(labels, choice);
+        if (index < 0) return;
+        PlayRecording(recording, recording.Cues[index].OffsetMilliseconds);
+    }
+
+    private async Task RenameRecordingAsync()
+    {
+        var recording = await ChooseRecordingAsync("选择录音");
+        if (recording is null) return;
+        var name = await DisplayPromptAsync("重命名录音", "录音名称", initialValue: recording.DisplayName, maxLength: 60);
+        if (string.IsNullOrWhiteSpace(name)) return;
+        recording.DisplayName = name.Trim();
+        _page!.ModifiedAt = DateTimeOffset.Now;
+        ScheduleSave();
+    }
+
+    private async Task DeleteRecordingAsync()
+    {
+        var recording = await ChooseRecordingAsync("选择要删除的录音");
+        if (recording is null || _page is null) return;
+        if (!await DisplayAlertAsync("删除录音", $"确定删除“{recording.DisplayName}”及其时间标记吗？", "删除", "取消")) return;
+        if (_activeRecording?.Id == recording.Id) StopActiveRecording();
+        if (_playingRecording?.Id == recording.Id) StopAudioPlayback();
+        AudioAttachmentService.TryDelete(_repository.Storage.NotebooksDirectory, recording.LocalFilePath);
+        AudioTimelineService.RemoveRecording(_page, recording.Id);
+        ScheduleSave();
+    }
+
+    private void AudioTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_activeRecording is not null)
+        {
+            _activeRecording.DurationMilliseconds = _audio.RecordingElapsedMilliseconds;
+            UpdateAudioButton();
+            return;
+        }
+        if (_playingRecording is null || !_audio.HasPlayback)
+        {
+            _audioTimer.Stop();
+            UpdateAudioButton();
+            return;
+        }
+
+        var position = _audio.PlaybackPositionMilliseconds;
+        var duration = Math.Max(_playingRecording.DurationMilliseconds, _audio.PlaybackDurationMilliseconds);
+        if (duration > 0 && position >= duration - 100 && !_audio.IsPlaying)
+        {
+            StopAudioPlayback();
+            return;
+        }
+        var cue = _playingRecording.Cues.LastOrDefault(item => item.OffsetMilliseconds <= position && position - item.OffsetMilliseconds <= 600);
+        if (cue is not null && cue.OffsetMilliseconds != _lastPresentedAudioCue)
+            _lastPresentedAudioCue = cue.OffsetMilliseconds;
+        UpdateAudioButton(cue?.Label);
+    }
+
+    private void UpdateAudioButton(string? cueLabel = null)
+    {
+        if (_audioButton is null) return;
+        if (_activeRecording is not null)
+        {
+            _audioButton.Text = $"停止 {AudioTimelineService.FormatDuration(_audio.RecordingElapsedMilliseconds)}";
+            _audioButton.BackgroundColor = Color.FromArgb("#FDE8E8");
+            _audioButton.TextColor = Color.FromArgb("#B42318");
+        }
+        else if (_playingRecording is not null && _audio.HasPlayback)
+        {
+            var suffix = string.IsNullOrWhiteSpace(cueLabel) ? string.Empty : $" · {cueLabel}";
+            _audioButton.Text = $"{(_audio.IsPlaying ? "播放" : "暂停")} {AudioTimelineService.FormatDuration(_audio.PlaybackPositionMilliseconds)}{suffix}";
+            _audioButton.BackgroundColor = UiTheme.AccentSoft;
+            _audioButton.TextColor = UiTheme.Accent;
+        }
+        else
+        {
+            _audioButton.Text = _page?.AudioRecordings.Count > 0 ? $"录音 {_page.AudioRecordings.Count}" : "录音";
+            _audioButton.BackgroundColor = UiTheme.Surface;
+            _audioButton.TextColor = UiTheme.Text;
         }
     }
 

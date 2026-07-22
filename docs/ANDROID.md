@@ -35,108 +35,112 @@
 
 ### 资料库
 
-- 点击“新建”创建笔记本。
-- 点击笔记卡片进入编辑器。
-- 使用搜索查找标题。
-- 删除的笔记会进入回收站，可恢复或永久删除。
+- 新建、打开、搜索、排序、重命名和删除笔记。
+- 回收站可恢复或永久删除笔记。
+- “恢复中心”列出未完成草稿与损坏文件，可查看诊断并另存抢救副本；原文件不会被覆盖。
 
 ### 书写
 
-- 手机端默认开启手指书写；选择钢笔或荧光笔后即可直接落笔，也支持触控笔书写。
-- 支持压力输入；设备提供倾角信息时会一并记录。
-- 触控笔橡皮端自动执行擦除。
-- 编辑器顶部两排工具栏始终显示笔型、粗细、颜色、手指开关、撤销和重做。
-- 使用撤销、重做修正操作。
+- 手机默认开启手指书写；钢笔、荧光笔、整笔/局部橡皮、粗细、颜色、手指开关、撤销和重做固定在两排工具栏中。
+- 触控笔支持压力与倾角；橡皮端自动切换擦除。
+- 双指缩放或移动时不会提交意外点迹。
+- 大笔迹页面只绘制当前可见区域及少量预加载边界；橡皮先查询附近笔迹再做精确命中。
 
-### 手势
+### 对象、页面与图层
 
-- 手指书写默认开启，单指直接书写。
-- 点击工具栏“手指：开/关”可快速切换；关闭后单指用于移动页面。
-- 双指始终可缩放和移动页面；也可选择“平移”工具专门导航。
-- “设置”中的“允许手指书写”与编辑器工具栏保持同步。
-
-### 页面与内容
-
-- 手机通过底部页面入口管理页面。
-- 平板横向空间足够时显示侧栏。
-- 可新增、复制、删除、重命名和跳转页面。
+- 手机使用底部页面入口，平板横向空间足够时显示侧栏。
+- 可新增、复制、删除、重命名、移动和跳转页面。
 - 可插入文本、图片和常用形状。
+- 矩形套索支持多对象移动、缩放、旋转、复制、删除、组合、层级顺序、锁定和批量样式。
+- 图层支持新增、激活、显隐、锁定、透明度、重命名、合并和删除时迁移内容。
+
+### 本地录音
+
+- 当前页面可开始、暂停、继续和停止录音。
+- 录音可播放、暂停、重命名、删除并添加命名时间标记。
+- 录音期间书写会记录时间点；音频使用 MPEG-4/AAC，保存在应用私有资料库并纳入整库备份。
 
 ## 文件交换
 
-- 导出 `.papernote` 后，可通过聊天工具、数据线、网盘或局域网传给 Windows/其他 Android 设备。
-- 导入 `.papernote` 会在本地资料库创建笔记副本。
-- PDF 可导入为页面背景，批注后再导出为普通 PDF。
+- 导出 .papernote 后，可通过聊天工具、数据线、网盘或局域网传给 Windows/其他 Android 设备。
+- 导入 .papernote 会在本地资料库创建副本。
+- PDF 可按页码范围导入为背景，批注后导出为普通扁平 PDF。
 
-PaperNote 本身不依赖网络，也不申请 INTERNET 权限；文件如何传输由用户选择的系统应用负责。
+PaperNote 不依赖网络，也不申请 INTERNET 权限；文件传输由用户选择的系统应用负责。
+
+## 保存、恢复与后台行为
+
+- 页面编辑会自动保存；切换笔记前保存任务会绑定正确文件。
+- 应用进入后台或编辑页销毁时，会保存当前笔记并停止/收尾活动录音。
+- 启动时会恢复较新的可读临时草稿。
+- 恢复中心无法结构化读取文件时，仅显示原始片段，不会覆盖或删除原文件。
 
 ## 备份与卸载
 
-Android 将资料库存放在应用私有目录。以下操作可能删除全部本地笔记：
+Android 将资料库存放在应用私有目录。卸载、清除应用数据、恢复出厂设置或部分清理工具可能删除全部本地笔记。
 
-- 卸载 PaperNote；
-- 在系统设置中清除 PaperNote 数据；
-- 恢复出厂设置；
-- 使用部分系统清理工具删除应用数据。
-
-执行这些操作前：
+操作前：
 
 1. 打开“备份”；
 2. 创建整库备份；
-3. 使用系统文件选择器把备份保存到下载目录、移动存储或其他安全位置；
-4. 最好在另一台设备上确认文件能够读取。
+3. 使用系统文件选择器把 .pnbak 保存到下载目录、移动存储或另一台设备；
+4. 最好执行一次恢复验证或至少核对 SHA-256；
+5. 升级时覆盖安装，不要先卸载。
 
 ## 返回键行为
 
-- 编辑器、搜索、设置、备份和回收站等子页面：返回资料库或上一页。
-- 资料库根页：将应用移入后台，不触发异常退出。
+- 编辑器、搜索、设置、备份、恢复中心和回收站：返回资料库或上一页。
+- 资料库根页：把应用移入后台，不触发异常退出。
 
 ## 故障排查
 
 ### 无法安装
 
-确认 Android 版本符合要求、APK 下载完整，并为打开 APK 的应用授予临时安装权限。
+确认 Android 版本符合要求、APK 完整，并只为当前文件来源临时开启“安装未知应用”。
 
-### 导入文件后没有出现
+### 导入后没有出现
 
-返回资料库并刷新搜索条件；若文件损坏或格式不受支持，应用会显示错误提示。
+清除搜索条件并刷新资料库；损坏文件可在恢复中心查看。
 
 ### 大型 PDF 导入较慢
 
-PDF 页面需要逐页转换。保持足够存储空间并等待处理完成，期间不要强制结束应用。
+当前仍按页面转换，尚无完整进度、取消和缓存机制。保留足够存储空间，处理期间不要强制结束应用。
 
-### 书写有明显延迟
+### 大笔迹页面仍有延迟
 
-关闭省电模式、减少后台高负载应用，并尝试降低页面缩放级别。低端设备处理大量笔画时可能需要拆分页面。
+关闭省电模式和高负载后台应用。视口按需渲染能减少无关笔迹开销，但低端设备上的超长单页仍建议拆分。
 
 ## Implementation status — 2026-07-22
 
-This section is the source of truth for the current offline scope.
+本节是当前离线版本能力边界的统一说明。
 
-### Implemented and covered by repository tests
+### 已实现并纳入仓库测试
 
-- Cross-platform PaperInk stores pressure, tilt, smoothing, partial/stroke erasing, opacity, and layer membership.
-- Android supports rectangle lasso, multi-object selection, move, resize, rotate, duplicate, delete, group/ungroup, z-order, lock, and batch style changes.
-- Page layers support create, activate, show/hide, lock, opacity, rename, merge, and delete-with-content-migration. Hidden content remains in the document.
-- Text, image, and shape objects preserve rotation, opacity, lock, hidden, group, and layer fields across serialization.
-- Offline search indexes notebook/page titles, tags, text objects, stored OCR text, stored handwriting-recognition text, and source names.
-- Saving writes and parses a temporary document before replacing the live file. Library backup format 2 records file length and SHA-256 and verifies every entry before import.
-- Notebook format version is 15 and migration preserves legacy ISF/PaperInk and pages created before layers existed.
-- Windows thumbnails and object overlays, plus the Android renderer, honor layer visibility and effective opacity.
+- Windows 与 Android 共用 PaperInk；支持压力、倾角、平滑、整笔/局部擦除、透明度和图层归属。
+- Android 支持矩形套索、多对象选择、移动、缩放、旋转、复制、删除、组合/取消组合、层级顺序、锁定和批量样式修改。
+- 页面图层支持新增、激活、显隐、锁定、透明度、重命名、合并和删除时迁移内容；隐藏内容不会从文件中丢失。
+- 文本、图片和形状对象的旋转、透明度、锁定、隐藏、组合和图层字段可跨平台保存。
+- 离线搜索覆盖笔记/页面标题、标签、文本对象、已存 OCR 文本、已存手写识别文本和来源名称。
+- 保存采用“临时文件写入并验证后替换”；启动时可恢复较新的临时草稿。Windows 与 Android 都提供恢复中心，可只读检查损坏文件并另存为抢救副本，原文件保持不变。
+- 读取时会修复空或重复 ID、无效图层引用、非有限墨迹数值及异常录音时间数据。
+- 大墨迹页面使用空间索引；Android 按可见视口绘制并用局部候选执行橡皮命中，避免每帧扫描全部笔迹。
+- 整库备份格式 3 包含笔记、历史版本和音频附件，记录长度与 SHA-256，并在导入前检查重复路径、越界路径、大小和内容完整性。
+- Windows 与 Android 均支持页面级本地录音、播放/暂停、重命名、删除、命名时间标记和书写时自动标记。Windows 使用 WAV，Android 使用 MPEG-4/AAC。
+- 压力测试覆盖 10,000+ 笔迹空间查询，以及 60 页、4,800 笔迹、600 对象、录音标记和图层关系的重复保存往返。
 
-### Scope boundaries
+### 当前明确边界
 
-- OCR and handwriting-recognition result fields are searchable, but the repository does not currently bundle an OCR or recognition engine.
-- Audio timeline and cue data models exist; recording capture and player UI are not yet complete.
-- Accounts, cloud sync, network AI, telemetry, advertising, and multi-user collaboration are intentionally out of scope.
-- APK, ZIP, signing keys, build output, and private notes are release artifacts or local data and are not committed.
+- OCR 和手写识别结果可以保存并搜索，但仓库尚未内置真正的离线 OCR、手写转文字或数学识别引擎。
+- 尚未提供自由形状套索、几何吸附、自动形状识别、标尺和大批量墨迹样式修改。
+- 录音暂不含波形视图、播放时笔迹高亮、麦克风设备选择和压缩质量控制。
+- PDF 尚不含大型文档页面缓存、导入进度/取消、表单编辑、测量和文档内文字搜索。
+- 完整屏幕阅读器语义、高对比度专项适配、加密设置界面和本地插件机制仍待完善。
+- 账号、云同步、联网 AI、遥测、广告和多人协作不在离线版本范围内。
+- APK、ZIP、签名密钥、构建输出和私人笔记属于发布产物或本地数据，不提交到源码仓库。
 
-### Verification
+### 验证入口
 
-```text
-dotnet run --project tests/PaperNote.Core.Tests/PaperNote.Core.Tests.csproj -c Release
-dotnet run --project tests/SmokeTest/SmokeTest.csproj -c Release
-dotnet run --project tests/BackgroundUiTest/BackgroundUiTest.csproj -c Release
-scripts/build-android.ps1
-scripts/test-android.ps1 -SkipUi
+```powershell
+.\scripts\build-android.ps1
+.\scripts\test.ps1 -SkipAndroidRuntime
 ```
