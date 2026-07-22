@@ -1,5 +1,6 @@
 using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
+using PaperNote.Core.Services;
 
 namespace PaperNote.Mobile.Controls;
 
@@ -38,6 +39,8 @@ public sealed class InkCanvasView : View
         nameof(EraserMode), typeof(InkEraserMode), typeof(InkCanvasView), InkEraserMode.Partial, propertyChanged: InvalidateNative);
     public static readonly BindableProperty SmoothingEnabledProperty = BindableProperty.Create(
         nameof(SmoothingEnabled), typeof(bool), typeof(InkCanvasView), true, propertyChanged: InvalidateNative);
+    public static readonly BindableProperty SelectionFilterProperty = BindableProperty.Create(
+        nameof(SelectionFilter), typeof(PageSelectionFilter), typeof(InkCanvasView), PageSelectionFilter.All, propertyChanged: InvalidateNative);
 
     public PaperInkDocument Document
     {
@@ -93,6 +96,12 @@ public sealed class InkCanvasView : View
         set => SetValue(SmoothingEnabledProperty, value);
     }
 
+    public PageSelectionFilter SelectionFilter
+    {
+        get => (PageSelectionFilter)GetValue(SelectionFilterProperty);
+        set => SetValue(SelectionFilterProperty, value);
+    }
+
     public event EventHandler? InkChanged;
     public event EventHandler? HistoryChanged;
     public event EventHandler? SelectionChanged;
@@ -101,7 +110,10 @@ public sealed class InkCanvasView : View
     public bool CanRedo => Handler is Platforms.Android.InkCanvasViewHandler handler && handler.CanRedo;
     public Guid? SelectedObjectId => (Handler as Platforms.Android.InkCanvasViewHandler)?.SelectedObjectId;
     public int SelectedObjectCount => (Handler as Platforms.Android.InkCanvasViewHandler)?.SelectedObjectCount ?? 0;
+    public int SelectedStrokeCount => (Handler as Platforms.Android.InkCanvasViewHandler)?.SelectedStrokeCount ?? 0;
+    public int SelectedContentCount => SelectedObjectCount + SelectedStrokeCount;
     public IReadOnlyCollection<Guid> SelectedObjectIds => (Handler as Platforms.Android.InkCanvasViewHandler)?.SelectedObjectIds ?? Array.Empty<Guid>();
+    public IReadOnlyCollection<Guid> SelectedStrokeIds => (Handler as Platforms.Android.InkCanvasViewHandler)?.SelectedStrokeIds ?? Array.Empty<Guid>();
 
     public void Undo() => (Handler as Platforms.Android.InkCanvasViewHandler)?.Undo();
     public void Redo() => (Handler as Platforms.Android.InkCanvasViewHandler)?.Redo();
@@ -115,7 +127,9 @@ public sealed class InkCanvasView : View
     public void SendSelectionToBack() => (Handler as Platforms.Android.InkCanvasViewHandler)?.SendSelectionToBack();
     public void ToggleSelectionLock() => (Handler as Platforms.Android.InkCanvasViewHandler)?.ToggleSelectionLock();
     public void UpdateSelectedText(string text) => (Handler as Platforms.Android.InkCanvasViewHandler)?.UpdateSelectedText(text);
-    public void UpdateSelectionStyle(string strokeColor, double opacity) => (Handler as Platforms.Android.InkCanvasViewHandler)?.UpdateSelectionStyle(strokeColor, opacity);
+    public void UpdateSelectionStyle(string? strokeColor = null, double? opacity = null, double? inkWidth = null, PaperInkTool? inkTool = null)
+        => (Handler as Platforms.Android.InkCanvasViewHandler)?.UpdateSelectionStyle(strokeColor, opacity, inkWidth, inkTool);
+    public void ClearSelection() => (Handler as Platforms.Android.InkCanvasViewHandler)?.ClearSelection();
     public void GroupSelection() => (Handler as Platforms.Android.InkCanvasViewHandler)?.GroupSelection();
     public void UngroupSelection() => (Handler as Platforms.Android.InkCanvasViewHandler)?.UngroupSelection();
 

@@ -1,4 +1,4 @@
-<Window x:Class="PaperNote.Desktop.MainWindow"
+﻿<Window x:Class="PaperNote.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -407,7 +407,8 @@
                         <Button x:Name="ShapeActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="52" Padding="7,0" Click="ShapeActions_Click" ToolTip="插入矩形、圆形、三角形、菱形、箭头等">形状⌄</Button>
                         <Button x:Name="TextActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="52" Padding="7,0" Click="TextActions_Click" ToolTip="复制或导出当前笔记中的可提取文字">文字⌄</Button>
                         <Button x:Name="SharedPaperTemplatesButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="68" Padding="7,0" Click="SharedPaperTemplates_Click" ToolTip="跨笔记保存和复用自定义纸张">模板库⌄</Button>
-<Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectActions_Click" ToolTip="复制、组合和层级操作">对象⌄</Button>
+<Button x:Name="SelectionActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="SelectionActions_Click" ToolTip="套索筛选、批量样式、旋转和跨页操作">选区⌄</Button>
+                        <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectActions_Click" ToolTip="复制、组合和层级操作">对象⌄</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectStyles_Click" ToolTip="修改文字、形状和图片样式">样式⌄</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectArrange_Click" ToolTip="对齐、分布、旋转、层级和锁定对象">排列⌄</Button>
                     </StackPanel>
@@ -814,9 +815,3 @@
         </Grid>
     </Grid>
 </Window>
-
-
-
-
-
-

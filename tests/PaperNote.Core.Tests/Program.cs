@@ -83,6 +83,89 @@ try
     Assert(PageObjectEditingService.SetLocked(objectPage, duplicates, false) && PageObjectEditingService.Delete(objectPage, duplicates), "解锁后对象应可删除");
     Assert(PageObjectEditingService.Ungroup(objectPage, [originalObjectIds[0]]) && objectPage.Objects.All(item => item.GroupId is null), "对象应可取消组合");
     Assert(PageObjectEditingService.UpdateStyle(objectPage, originalObjectIds, strokeColor: "#FF0000", strokeThickness: 7, opacity: .5) && objectPage.Objects.All(item => item.StrokeColor == "#FF0000" && item.Opacity == .5), "对象样式应可批量更新");
+
+    var editableLayer = new PageLayer { Name = "可编辑" };
+    var lockedLayer = new PageLayer { Name = "锁定", IsLocked = true };
+    var selectionPage = new NotebookPage { Layers = [editableLayer, lockedLayer], ActiveLayerId = editableLayer.Id };
+    var trianglePen = new PaperInkStroke
+    {
+        Tool = PaperInkTool.Pen, LayerId = editableLayer.Id, Width = 4,
+        Points = [new() { X = 30, Y = 30 }, new() { X = 55, Y = 55 }, new() { X = 80, Y = 45 }]
+    };
+    var highlighter = new PaperInkStroke
+    {
+        Tool = PaperInkTool.Highlighter, LayerId = editableLayer.Id, Width = 18,
+        Points = [new() { X = 230, Y = 70 }, new() { X = 270, Y = 90 }]
+    };
+    var crossingStroke = new PaperInkStroke
+    {
+        Tool = PaperInkTool.Pen, LayerId = editableLayer.Id, Width = 3,
+        Points = [new() { X = 0, Y = 160 }, new() { X = 320, Y = 160 }]
+    };
+    var lockedStroke = new PaperInkStroke
+    {
+        Tool = PaperInkTool.Pen, LayerId = lockedLayer.Id, Color = "#111111", Width = 5,
+        Points = [new() { X = 60, Y = 70 }, new() { X = 90, Y = 80 }]
+    };
+    selectionPage.Ink.Strokes.AddRange([trianglePen, highlighter, crossingStroke, lockedStroke]);
+    var textObject = new PageObject { Kind = "Text", X = 30, Y = 25, Width = 80, Height = 55, LayerId = editableLayer.Id };
+    var imageObject = new PageObject { Kind = "Image", X = 230, Y = 45, Width = 80, Height = 80, LayerId = editableLayer.Id };
+    var rotatedShape = new PageObject { Kind = "Shape", X = 130, Y = 120, Width = 80, Height = 40, Rotation = 45, LayerId = editableLayer.Id };
+    var lockedLayerObject = new PageObject { Kind = "Shape", X = 400, Y = 400, Width = 90, Height = 70, LayerId = lockedLayer.Id, StrokeColor = "#224466" };
+    selectionPage.Objects.AddRange([textObject, imageObject, rotatedShape, lockedLayerObject]);
+
+    var triangle = new[] { new PaperInkPoint { X = 10, Y = 10 }, new PaperInkPoint { X = 125, Y = 10 }, new PaperInkPoint { X = 10, Y = 125 } };
+    var triangleSelection = PageSelectionService.SelectByPolygon(selectionPage, triangle);
+    Assert(triangleSelection.StrokeIds.Contains(trianglePen.Id) && triangleSelection.ObjectIds.Contains(textObject.Id), "自由三角套索应同时命中笔迹和文字对象");
+    Assert(!triangleSelection.StrokeIds.Contains(highlighter.Id) && !triangleSelection.ObjectIds.Contains(imageObject.Id), "自由套索不应命中范围外内容");
+
+    var crossingPolygon = new[]
+    {
+        new PaperInkPoint { X = 120, Y = 140 }, new PaperInkPoint { X = 200, Y = 140 },
+        new PaperInkPoint { X = 200, Y = 180 }, new PaperInkPoint { X = 120, Y = 180 }
+    };
+    Assert(InkSelectionService.SelectByPolygon(selectionPage.Ink, crossingPolygon).Contains(crossingStroke.Id), "长笔迹穿过套索时即使端点在外也应被选中");
+    Assert(PageSelectionService.SelectByPolygon(selectionPage, triangle, PageSelectionFilter.Pen).StrokeIds.Contains(trianglePen.Id), "钢笔筛选应保留钢笔");
+    Assert(!PageSelectionService.SelectByPolygon(selectionPage, triangle, PageSelectionFilter.Highlighter).StrokeIds.Contains(trianglePen.Id), "荧光笔筛选不应选择钢笔");
+    Assert(PageSelectionService.SelectByPolygon(selectionPage, triangle, PageSelectionFilter.Text).ObjectIds.SequenceEqual([textObject.Id]), "文字筛选应只选择文字对象");
+    Assert(PageSelectionService.SelectByPolygon(selectionPage, new[]
+    {
+        new PaperInkPoint { X = 115, Y = 100 }, new PaperInkPoint { X = 230, Y = 100 },
+        new PaperInkPoint { X = 230, Y = 205 }, new PaperInkPoint { X = 115, Y = 205 }
+    }, PageSelectionFilter.Shape).ObjectIds.Contains(rotatedShape.Id), "旋转对象应使用旋转后的轮廓参与套索命中");
+
+    Assert(InkSelectionService.UpdateStyle(selectionPage, [trianglePen.Id, lockedStroke.Id], color: "#AA0000", width: 9, opacity: .4), "选中笔迹应可批量改色、改粗细和透明度");
+    Assert(trianglePen.Color == "#AA0000" && trianglePen.Width == 9 && trianglePen.Opacity == .4, "可编辑笔迹样式应更新");
+    Assert(lockedStroke.Color == "#111111" && lockedStroke.Width == 5, "锁定图层笔迹不应被批量修改");
+    var lockedObjectSnapshot = lockedLayerObject.Clone();
+    Assert(!PageObjectEditingService.Move(selectionPage, [lockedLayerObject.Id], 20, 20), "锁定图层对象不应被移动");
+    Assert(!PageObjectEditingService.Resize(selectionPage, [lockedLayerObject.Id], 180, 140), "锁定图层对象不应被缩放");
+    Assert(!PageObjectEditingService.Rotate(selectionPage, [lockedLayerObject.Id], 90), "锁定图层对象不应被旋转");
+    Assert(PageObjectEditingService.Duplicate(selectionPage, [lockedLayerObject.Id]).Count == 0, "锁定图层对象不应被复制");
+    Assert(!PageObjectEditingService.UpdateStyle(selectionPage, [lockedLayerObject.Id], strokeColor: "#FF0000", opacity: .25), "锁定图层对象不应被批量修改样式");
+    Assert(!PageObjectEditingService.Delete(selectionPage, [lockedLayerObject.Id]), "锁定图层对象不应被删除");
+    Assert(!PageObjectEditingService.SetLocked(selectionPage, [lockedLayerObject.Id], true), "锁定图层内不应修改对象锁定状态");
+    Assert(lockedLayerObject.X == lockedObjectSnapshot.X && lockedLayerObject.Y == lockedObjectSnapshot.Y && lockedLayerObject.Width == lockedObjectSnapshot.Width && lockedLayerObject.StrokeColor == lockedObjectSnapshot.StrokeColor, "锁定图层对象属性必须保持不变");
+
+    var combinedBefore = PageSelectionService.GetCombinedBounds(selectionPage, [trianglePen.Id], [imageObject.Id]);
+    Assert(combinedBefore is not null && combinedBefore.Value.X < imageObject.X && combinedBefore.Value.Right >= imageObject.X + imageObject.Width, "混合选区边界应覆盖笔迹和对象");
+    var imageXBeforeMove = imageObject.X;
+    var penXBeforeMove = trianglePen.Points[0].X;
+    Assert(PageSelectionService.Move(selectionPage, [trianglePen.Id], [imageObject.Id], 20, 30), "混合选区应可整体移动");
+    Assert(Math.Abs((imageObject.X - imageXBeforeMove) - (trianglePen.Points[0].X - penXBeforeMove)) < .001, "混合移动应对笔迹和对象应用同一位移");
+    var combinedMoved = PageSelectionService.GetCombinedBounds(selectionPage, [trianglePen.Id], [imageObject.Id])!.Value;
+    Assert(PageSelectionService.Resize(selectionPage, [trianglePen.Id], [imageObject.Id], combinedMoved.Width * 1.5, combinedMoved.Height * 1.5), "混合选区应使用联合矩阵缩放");
+    var objectCenterBeforeRotate = (X: imageObject.X + imageObject.Width / 2, Y: imageObject.Y + imageObject.Height / 2);
+    Assert(PageSelectionService.Rotate(selectionPage, [trianglePen.Id], [imageObject.Id], 90) && imageObject.Rotation == 90, "混合选区应绕联合中心旋转");
+    Assert(Math.Abs(imageObject.X + imageObject.Width / 2 - objectCenterBeforeRotate.X) > .01 || Math.Abs(imageObject.Y + imageObject.Height / 2 - objectCenterBeforeRotate.Y) > .01, "混合旋转应移动对象中心而非各自原地旋转");
+
+    var transferTarget = new NotebookPage { Title = "目标页" };
+    var copied = PageSelectionService.Transfer(selectionPage, transferTarget, [trianglePen.Id], [textObject.Id], move: false);
+    Assert(copied.Count == 2 && selectionPage.Ink.Strokes.Any(item => item.Id == trianglePen.Id) && selectionPage.Objects.Any(item => item.Id == textObject.Id), "跨页复制应保留源内容");
+    Assert(copied.StrokeIds.All(id => id != trianglePen.Id) && copied.ObjectIds.All(id => id != textObject.Id), "跨页复制应生成新的内容 ID");
+    Assert(transferTarget.Ink.Strokes.Where(item => copied.StrokeIds.Contains(item.Id)).All(item => item.LayerId == transferTarget.ActiveLayerId) && transferTarget.Objects.Where(item => copied.ObjectIds.Contains(item.Id)).All(item => item.LayerId == transferTarget.ActiveLayerId), "跨页内容应映射到目标页活动图层");
+    var moved = PageSelectionService.Transfer(selectionPage, transferTarget, [highlighter.Id], [imageObject.Id], move: true);
+    Assert(moved.Count == 2 && selectionPage.Ink.Strokes.All(item => item.Id != highlighter.Id) && selectionPage.Objects.All(item => item.Id != imageObject.Id), "跨页移动应删除源内容并保留目标副本");
     var largeInk = new PaperInkDocument();
     for (var index = 0; index < 10_000; index++)
     {
@@ -286,7 +369,8 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
     var encrypted = encryption.Encrypt(loaded, "correct horse battery");
     Assert(NotebookEncryptionService.IsEncrypted(encrypted) && encryption.Decrypt(encrypted, "correct horse battery").Title == loaded.Title, "笔记本加密应可往返");
     var digest = DocumentIntegrityService.ComputeSha256(encrypted);
-    Assert(DocumentIntegrityService.Verify(encrypted, digest) && !DocumentIntegrityService.Verify(encrypted, digest[..^1] + "0"), "内容哈希应可校验");
+    var invalidDigest = digest[..^1] + (digest[^1] == '0' ? "1" : "0");
+    Assert(DocumentIntegrityService.Verify(encrypted, digest) && !DocumentIntegrityService.Verify(encrypted, invalidDigest), "内容哈希应可校验");
 
     var backup = await storage.CreateBackupAsync(stored.FilePath);
     loaded.Title = "已更改";

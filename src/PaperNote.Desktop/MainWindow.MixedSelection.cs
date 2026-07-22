@@ -1,10 +1,12 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Ink;
 using System.Windows.Input;
+using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
-using PaperNote.Desktop.Services;
 using PaperNote.Core.Services;
+using PaperNote.Desktop.Services;
 
 namespace PaperNote.Desktop;
 
@@ -14,19 +16,26 @@ public partial class MainWindow
     private bool _isMixedLassoActive;
     private bool _mixedLassoUsesStylus;
     private ModifierKeys _mixedLassoModifiers;
+    private PageSelectionFilter _mixedSelectionFilter = PageSelectionFilter.All;
+    private readonly Dictionary<Guid, PageObject> _mixedSelectionObjectOrigins = [];
+    private Rect _mixedSelectionInkOrigin;
+    private bool _mixedSelectionEditActive;
+    private bool _mixedSelectionEditIsResize;
 
     private bool SelectAllInkAndPageObjects()
     {
         if (_isReadOnly || _currentPage is null || _activeTool != "Select") return false;
-
-        InkSurface.Select(InkSurface.Strokes);
-        _selectedPageObjectIds.Clear();
-        foreach (var pageObject in _currentPage.Objects) _selectedPageObjectIds.Add(pageObject.Id);
-
-        SetPrimarySelectionFromCurrentIds();
-        UpdatePageObjectSelectionVisuals();
+        SyncCurrentInkModelForSelection();
+        var polygon = new[]
+        {
+            InkPoint(-1, -1),
+            InkPoint(PageThumbnailService.PageWidth + 1, -1),
+            InkPoint(PageThumbnailService.PageWidth + 1, PageThumbnailService.PageHeight + 1),
+            InkPoint(-1, PageThumbnailService.PageHeight + 1)
+        };
+        ApplySelectionResult(PageSelectionService.SelectByPolygon(_currentPage, polygon, _mixedSelectionFilter), additive: false);
         UpdateMixedSelectionStatus();
-        return InkSurface.Strokes.Count > 0 || _selectedPageObjectIds.Count > 0;
+        return HasMixedSelection();
     }
 
     private bool TryBeginMixedLasso(Point point, bool usesStylus)
@@ -96,59 +105,40 @@ public partial class MainWindow
     private void ApplyMixedLassoSelection(IReadOnlyList<Point> lassoPoints, bool additive)
     {
         if (_currentPage is null) return;
-        var closedPoints = lassoPoints.ToList();
-        if (closedPoints[0] != closedPoints[^1]) closedPoints.Add(closedPoints[0]);
-        var hitStrokes = InkSurface.Strokes.HitTest(closedPoints, 45);
-
-        if (additive)
-        {
-            var combined = new StrokeCollection(InkSurface.GetSelectedStrokes());
-            foreach (var stroke in hitStrokes)
-            {
-                if (!combined.Contains(stroke)) combined.Add(stroke);
-            }
-            InkSurface.Select(combined);
-        }
-        else
-        {
-            InkSurface.Select(hitStrokes);
-            _selectedPageObjectIds.Clear();
-        }
-
-        foreach (var pageObject in _currentPage.Objects.Where(item => IsObjectHitByLasso(item, closedPoints)))
-        {
-            foreach (var member in GetSelectionUnit(pageObject)) _selectedPageObjectIds.Add(member.Id);
-        }
-
-        SetPrimarySelectionFromCurrentIds();
-        UpdatePageObjectSelectionVisuals();
+        SyncCurrentInkModelForSelection();
+        var polygon = lassoPoints.Select(point => InkPoint(point.X, point.Y)).ToArray();
+        var result = PageSelectionService.SelectByPolygon(_currentPage, polygon, _mixedSelectionFilter);
+        ApplySelectionResult(result, additive);
         UpdateMixedSelectionStatus();
     }
 
-    private static bool IsObjectHitByLasso(PageObject pageObject, IReadOnlyList<Point> polygon)
+    private void ApplySelectionResult(PageSelectionResult result, bool additive)
     {
-        var rect = new Rect(pageObject.X, pageObject.Y, pageObject.Width, pageObject.Height);
-        var center = new Point(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
-        if (IsPointInPolygon(center, polygon)) return true;
-        if (IsPointInPolygon(rect.TopLeft, polygon) || IsPointInPolygon(rect.TopRight, polygon) ||
-            IsPointInPolygon(rect.BottomLeft, polygon) || IsPointInPolygon(rect.BottomRight, polygon)) return true;
-        return polygon.Any(rect.Contains);
+        var strokeIds = result.StrokeIds.Where(id =>
+        {
+            var stroke = _currentPage?.Ink.Strokes.FirstOrDefault(item => item.Id == id);
+            return stroke is not null && !PageLayerService.IsContentLocked(_currentPage!, stroke.LayerId);
+        }).ToHashSet();
+        var selectedStrokes = additive
+            ? new StrokeCollection(InkSurface.GetSelectedStrokes().Where(stroke =>
+            {
+                var model = _currentPage?.Ink.Strokes.FirstOrDefault(item => item.Id == WpfInkAdapter.GetStrokeId(stroke));
+                return model is not null && !PageLayerService.IsContentLocked(_currentPage!, model.LayerId);
+            }))
+            : new StrokeCollection();
+        foreach (var stroke in InkSurface.Strokes)
+        {
+            if (strokeIds.Contains(WpfInkAdapter.GetStrokeId(stroke)) && !selectedStrokes.Contains(stroke)) selectedStrokes.Add(stroke);
+        }
+        InkSurface.Select(selectedStrokes);
+
+        if (!additive) _selectedPageObjectIds.Clear();
+        foreach (var id in result.ObjectIds) _selectedPageObjectIds.Add(id);
+        SetPrimarySelectionFromCurrentIds();
+        UpdatePageObjectSelectionVisuals();
     }
 
-    private static bool IsPointInPolygon(Point point, IReadOnlyList<Point> polygon)
-    {
-        var inside = false;
-        for (var i = 0; i < polygon.Count; i++)
-        {
-            var j = i == 0 ? polygon.Count - 1 : i - 1;
-            var pi = polygon[i];
-            var pj = polygon[j];
-            if ((pi.Y > point.Y) == (pj.Y > point.Y)) continue;
-            var crossingX = (pj.X - pi.X) * (point.Y - pi.Y) / (pj.Y - pi.Y) + pi.X;
-            if (point.X < crossingX) inside = !inside;
-        }
-        return inside;
-    }
+    private static PaperInkPoint InkPoint(double x, double y) => new() { X = x, Y = y };
 
     private static Rect GetLassoBounds(IReadOnlyList<Point> points)
     {
@@ -166,6 +156,279 @@ public partial class MainWindow
             Math.Clamp(point.Y, 0, PageThumbnailService.PageHeight));
     }
 
+    private void BeginMixedSelectionEdit(InkCanvasSelectionEditingEventArgs e, bool resize)
+    {
+        BeginSelectionAction();
+        if (_currentPage is null || _selectedPageObjectIds.Count == 0) return;
+        if (!_mixedSelectionEditActive || _mixedSelectionEditIsResize != resize)
+        {
+            _mixedSelectionEditActive = true;
+            _mixedSelectionEditIsResize = resize;
+            _mixedSelectionInkOrigin = e.OldRectangle;
+            _mixedSelectionObjectOrigins.Clear();
+            foreach (var item in SelectedPageObjects().Where(IsPageObjectEditable)) _mixedSelectionObjectOrigins[item.Id] = item.Clone();
+        }
+        if (_mixedSelectionObjectOrigins.Count == 0 || _mixedSelectionInkOrigin.IsEmpty) return;
+
+        if (!resize)
+        {
+            var deltaX = e.NewRectangle.X - _mixedSelectionInkOrigin.X;
+            var deltaY = e.NewRectangle.Y - _mixedSelectionInkOrigin.Y;
+            foreach (var (id, origin) in _mixedSelectionObjectOrigins)
+            {
+                if (_currentPage.Objects.FirstOrDefault(item => item.Id == id) is not { } item) continue;
+                item.X = Math.Clamp(origin.X + deltaX, 0, Math.Max(0, PageThumbnailService.PageWidth - item.Width));
+                item.Y = Math.Clamp(origin.Y + deltaY, 0, Math.Max(0, PageThumbnailService.PageHeight - item.Height));
+                UpdateMixedSelectionObjectContainer(item);
+            }
+            return;
+        }
+
+        var scaleX = e.NewRectangle.Width / Math.Max(_mixedSelectionInkOrigin.Width, .001);
+        var scaleY = e.NewRectangle.Height / Math.Max(_mixedSelectionInkOrigin.Height, .001);
+        if (!double.IsFinite(scaleX) || !double.IsFinite(scaleY)) return;
+        foreach (var (id, origin) in _mixedSelectionObjectOrigins)
+        {
+            if (_currentPage.Objects.FirstOrDefault(item => item.Id == id) is not { } item) continue;
+            var minWidth = item.Kind == "Text" ? 150 : 80;
+            var minHeight = item.Kind == "Text" ? 90 : 60;
+            item.X = Math.Clamp(e.NewRectangle.X + (origin.X - _mixedSelectionInkOrigin.X) * scaleX, 0, PageThumbnailService.PageWidth - minWidth);
+            item.Y = Math.Clamp(e.NewRectangle.Y + (origin.Y - _mixedSelectionInkOrigin.Y) * scaleY, 0, PageThumbnailService.PageHeight - minHeight);
+            item.Width = Math.Clamp(origin.Width * scaleX, minWidth, PageThumbnailService.PageWidth - item.X);
+            item.Height = Math.Clamp(origin.Height * scaleY, minHeight, PageThumbnailService.PageHeight - item.Y);
+            UpdateMixedSelectionObjectContainer(item);
+        }
+    }
+
+    private void EndMixedSelectionEdit()
+    {
+        var objectsChanged = _mixedSelectionEditActive && _mixedSelectionObjectOrigins.Count > 0;
+        _mixedSelectionEditActive = false;
+        _mixedSelectionObjectOrigins.Clear();
+        EndSelectionAction();
+        if (objectsChanged) PageObjectChanged();
+        UpdateMixedSelectionStatus();
+    }
+
+    private bool IsPageObjectEditable(PageObject item)
+    {
+        return _currentPage is not null && !item.IsLocked && !PageLayerService.IsContentLocked(_currentPage, item.LayerId);
+    }
+
+    private void UpdateMixedSelectionObjectContainer(PageObject item)
+    {
+        if (!_pageObjectContainers.TryGetValue(item.Id, out var container)) return;
+        Canvas.SetLeft(container, item.X);
+        Canvas.SetTop(container, item.Y);
+        container.Width = item.Width;
+        container.Height = item.Height;
+    }
+
+    private void SelectionActions_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button) return;
+        var menu = CreateSelectionActionsMenu();
+        menu.PlacementTarget = button;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    private ContextMenu CreateSelectionActionsMenu()
+    {
+        var hasInk = InkSurface.GetSelectedStrokes().Count > 0;
+        var hasObjects = _selectedPageObjectIds.Count > 0;
+        var hasSelection = hasInk || hasObjects;
+        var canModify = hasSelection && !_isReadOnly;
+        var menu = new ContextMenu();
+
+        var filterMenu = new MenuItem { Header = $"套索筛选：{MixedSelectionFilterName(_mixedSelectionFilter)}" };
+        AddSelectionFilterItem(filterMenu, "全部内容", PageSelectionFilter.All);
+        AddSelectionFilterItem(filterMenu, "全部笔迹", PageSelectionFilter.Ink);
+        AddSelectionFilterItem(filterMenu, "仅钢笔", PageSelectionFilter.Pen);
+        AddSelectionFilterItem(filterMenu, "仅荧光笔", PageSelectionFilter.Highlighter);
+        filterMenu.Items.Add(new Separator());
+        AddSelectionFilterItem(filterMenu, "全部对象", PageSelectionFilter.Objects);
+        AddSelectionFilterItem(filterMenu, "仅文字", PageSelectionFilter.Text);
+        AddSelectionFilterItem(filterMenu, "仅图片", PageSelectionFilter.Image);
+        AddSelectionFilterItem(filterMenu, "仅形状", PageSelectionFilter.Shape);
+        menu.Items.Add(filterMenu);
+        menu.Items.Add(new Separator());
+
+        menu.Items.Add(CreateMenuItem("改为当前颜色", "", (_, _) => ApplyMixedSelectionStyle(color: ColorToHex(_currentColor)), canModify));
+        var opacityMenu = new MenuItem { Header = "设置透明度", IsEnabled = canModify };
+        foreach (var (label, value) in new[] { ("100%", 1d), ("75%", .75d), ("50%", .5d), ("35%", .35d), ("25%", .25d) })
+            opacityMenu.Items.Add(CreateMenuItem(label, "", (_, _) => ApplyMixedSelectionStyle(opacity: value), canModify));
+        menu.Items.Add(opacityMenu);
+
+        var widthMenu = new MenuItem { Header = "设置笔迹粗细", IsEnabled = hasInk && !_isReadOnly };
+        foreach (var value in new[] { 1d, 2d, 3.2d, 5d, 8d, 12d, 18d, 24d })
+        {
+            var captured = value;
+            widthMenu.Items.Add(CreateMenuItem(captured.ToString("0.#"), "", (_, _) => ApplyMixedSelectionStyle(width: captured), hasInk && !_isReadOnly));
+        }
+        menu.Items.Add(widthMenu);
+
+        var toolMenu = new MenuItem { Header = "设置笔迹类型", IsEnabled = hasInk && !_isReadOnly };
+        toolMenu.Items.Add(CreateMenuItem("钢笔", "", (_, _) => ApplyMixedSelectionStyle(tool: PaperInkTool.Pen), hasInk && !_isReadOnly));
+        toolMenu.Items.Add(CreateMenuItem("荧光笔", "", (_, _) => ApplyMixedSelectionStyle(tool: PaperInkTool.Highlighter), hasInk && !_isReadOnly));
+        menu.Items.Add(toolMenu);
+        menu.Items.Add(new Separator());
+
+        menu.Items.Add(CreateMenuItem("复制一份", "", (_, _) => DuplicateMixedSelection(), canModify));
+        menu.Items.Add(CreateMenuItem("向左旋转 90°", "Alt+Left", (_, _) => RotateMixedSelection(-90), canModify));
+        menu.Items.Add(CreateMenuItem("向右旋转 90°", "Alt+Right", (_, _) => RotateMixedSelection(90), canModify));
+        menu.Items.Add(CreateSelectionTransferMenu("复制到其他页面", move: false, canModify));
+        menu.Items.Add(CreateSelectionTransferMenu("移动到其他页面", move: true, canModify));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(CreateMenuItem("清除选择", "Esc", (_, _) => ClearMixedSelection(), hasSelection));
+        menu.Items.Add(CreateMenuItem("删除选中内容", "Delete", (_, _) => DeleteMixedSelection(), canModify));
+        return menu;
+    }
+
+    private void AddSelectionFilterItem(ItemsControl menu, string label, PageSelectionFilter filter)
+    {
+        var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = _mixedSelectionFilter == filter };
+        item.Click += (_, _) => SetMixedSelectionFilter(filter);
+        menu.Items.Add(item);
+    }
+
+    private MenuItem CreateSelectionTransferMenu(string header, bool move, bool enabled)
+    {
+        var menu = new MenuItem { Header = header, IsEnabled = enabled && _currentNotebook is { Pages.Count: > 1 } };
+        if (_currentNotebook is null || _currentPage is null) return menu;
+        for (var index = 0; index < _currentNotebook.Pages.Count; index++)
+        {
+            var page = _currentNotebook.Pages[index];
+            if (page.Id == _currentPage.Id) continue;
+            var target = page;
+            var title = string.IsNullOrWhiteSpace(page.Title) ? string.Empty : $" · {page.Title}";
+            menu.Items.Add(CreateMenuItem($"第 {index + 1} 页{title}", "", (_, _) => TransferMixedSelection(target, move), enabled));
+        }
+        return menu;
+    }
+
+    private void SetMixedSelectionFilter(PageSelectionFilter filter)
+    {
+        if (_mixedSelectionFilter == filter) return;
+        _mixedSelectionFilter = filter;
+        ClearMixedSelection();
+        StatusText.Text = $"套索筛选已切换为：{MixedSelectionFilterName(filter)}";
+    }
+
+    private static string MixedSelectionFilterName(PageSelectionFilter filter) => filter switch
+    {
+        PageSelectionFilter.Ink => "全部笔迹",
+        PageSelectionFilter.Pen => "仅钢笔",
+        PageSelectionFilter.Highlighter => "仅荧光笔",
+        PageSelectionFilter.Objects => "全部对象",
+        PageSelectionFilter.Text => "仅文字",
+        PageSelectionFilter.Image => "仅图片",
+        PageSelectionFilter.Shape => "仅形状",
+        _ => "全部内容"
+    };
+
+    private bool ApplyMixedSelectionStyle(string? color = null, double? width = null, double? opacity = null, PaperInkTool? tool = null)
+    {
+        if (_isReadOnly || _currentPage is null) return false;
+        var strokeIds = GetSelectedStrokeIds();
+        var objectIds = _selectedPageObjectIds.ToArray();
+        if (strokeIds.Count == 0 && objectIds.Length == 0) return false;
+
+        _history.Record(InkSurface.Strokes);
+        CaptureCurrentPage();
+        var inkChanged = InkSelectionService.UpdateStyle(_currentPage, strokeIds, color, width, opacity, tool);
+        var objectChanged = (color is not null || opacity.HasValue) &&
+                            PageObjectEditingService.UpdateStyle(_currentPage, objectIds, strokeColor: color, opacity: opacity);
+        if (!inkChanged && !objectChanged) return false;
+
+        RefreshCurrentPageFromModel(strokeIds, objectIds);
+        UpdateHistoryButtons();
+        StatusText.Text = "已更新选中内容样式";
+        return true;
+    }
+
+    private bool DuplicateMixedSelection()
+    {
+        if (_isReadOnly || _currentPage is null) return false;
+        var strokeIds = GetSelectedStrokeIds();
+        var objectIds = SelectedPageObjects().Where(item => !item.IsLocked).Select(item => item.Id).ToArray();
+        if (strokeIds.Count == 0 && objectIds.Length == 0) return false;
+
+        _history.Record(InkSurface.Strokes);
+        CaptureCurrentPage();
+        var newStrokeIds = InkSelectionService.Duplicate(_currentPage, strokeIds);
+        var newObjectIds = PageObjectEditingService.Duplicate(_currentPage, objectIds);
+        RefreshCurrentPageFromModel(newStrokeIds, newObjectIds);
+        UpdateHistoryButtons();
+        StatusText.Text = $"已复制 {newStrokeIds.Count} 条笔迹和 {newObjectIds.Count} 个对象";
+        return newStrokeIds.Count + newObjectIds.Count > 0;
+    }
+
+    private bool RotateMixedSelection(double degrees)
+    {
+        if (_isReadOnly || _currentPage is null) return false;
+        var strokeIds = GetSelectedStrokeIds();
+        var objectIds = _selectedPageObjectIds.ToArray();
+        if (strokeIds.Count == 0 && objectIds.Length == 0) return false;
+
+        _history.Record(InkSurface.Strokes);
+        CaptureCurrentPage();
+        if (!PageSelectionService.Rotate(_currentPage, strokeIds, objectIds, degrees)) return false;
+        RefreshCurrentPageFromModel(strokeIds, objectIds);
+        UpdateHistoryButtons();
+        StatusText.Text = degrees < 0 ? "已向左旋转选中内容" : "已向右旋转选中内容";
+        return true;
+    }
+
+    private bool TransferMixedSelection(NotebookPage targetPage, bool move)
+    {
+        if (_isReadOnly || _currentPage is null || targetPage.Id == _currentPage.Id) return false;
+        var strokeIds = GetSelectedStrokeIds();
+        var objectIds = _selectedPageObjectIds.ToArray();
+        if (strokeIds.Count == 0 && objectIds.Length == 0) return false;
+
+        _history.Record(InkSurface.Strokes);
+        CaptureCurrentPage();
+        var result = PageSelectionService.Transfer(_currentPage, targetPage, strokeIds, objectIds, move);
+        if (result.Count == 0) return false;
+
+        InvalidatePageThumbnail(targetPage.Id);
+        RefreshCurrentPageFromModel(move ? Array.Empty<Guid>() : strokeIds, move ? Array.Empty<Guid>() : objectIds);
+        RefreshPageItems(_currentPage.Id);
+        UpdateHistoryButtons();
+        StatusText.Text = $"已{(move ? "移动" : "复制")} {result.StrokeIds.Count} 条笔迹和 {result.ObjectIds.Count} 个对象到其他页面";
+        return true;
+    }
+
+    private void RefreshCurrentPageFromModel(IEnumerable<Guid> selectedStrokeIds, IEnumerable<Guid> selectedObjectIds)
+    {
+        if (_currentPage is null) return;
+        var strokeSet = selectedStrokeIds.ToHashSet();
+        var objectSet = selectedObjectIds.ToHashSet();
+        _currentPage.InkData = PageThumbnailService.Serialize(WpfInkAdapter.ToStrokeCollection(_currentPage.Ink));
+        ReplaceStrokes(WpfInkAdapter.ToStrokeCollection(_currentPage.Ink), false);
+        LoadPageObjects(_currentPage);
+        InkSurface.Select(new StrokeCollection(InkSurface.Strokes.Where(stroke => strokeSet.Contains(WpfInkAdapter.GetStrokeId(stroke)))));
+        foreach (var id in objectSet.Where(id => _currentPage.Objects.Any(item => item.Id == id))) _selectedPageObjectIds.Add(id);
+        SetPrimarySelectionFromCurrentIds();
+        UpdatePageObjectSelectionVisuals();
+        _currentPage.ModifiedAt = DateTimeOffset.Now;
+        UpdateCurrentPageThumbnail();
+        MarkDirty();
+    }
+
+    private void SyncCurrentInkModelForSelection()
+    {
+        if (_currentPage is not null) _currentPage.Ink = WpfInkAdapter.ToPaperInk(InkSurface.Strokes);
+    }
+
+    private IReadOnlyList<Guid> GetSelectedStrokeIds()
+    {
+        return InkSurface.GetSelectedStrokes().Select(WpfInkAdapter.GetStrokeId).Distinct().ToArray();
+    }
+
+    private bool HasMixedSelection() => InkSurface.GetSelectedStrokes().Count > 0 || _selectedPageObjectIds.Count > 0;
+
     private void ClearMixedSelection()
     {
         InkSurface.Select(new StrokeCollection());
@@ -176,45 +439,30 @@ public partial class MainWindow
     private bool DeleteMixedSelection()
     {
         if (_isReadOnly || _currentPage is null) return false;
+        var strokeIds = GetSelectedStrokeIds();
+        var objectIds = _selectedPageObjectIds.ToArray();
+        if (strokeIds.Count == 0 && objectIds.Length == 0) return false;
 
-        var selectedStrokes = InkSurface.GetSelectedStrokes();
-        var deletingObjectIds = SelectedPageObjects()
-            .Where(item => !item.IsLocked)
-            .Select(item => item.Id)
-            .ToHashSet();
-        if (selectedStrokes.Count == 0 && deletingObjectIds.Count == 0) return false;
-
-        var selectedStrokeCount = selectedStrokes.Count;
-        if (selectedStrokeCount > 0)
+        var lockedStrokeCount = strokeIds.Count(id =>
         {
-            _history.Record(InkSurface.Strokes);
-            InkSurface.Strokes.Remove(selectedStrokes);
-            UpdateHistoryButtons();
-        }
+            var stroke = _currentPage.Ink.Strokes.FirstOrDefault(item => item.Id == id);
+            return stroke is not null && PageLayerService.IsContentLocked(_currentPage, stroke.LayerId);
+        });
+        var lockedObjectCount = SelectedPageObjects().Count(item => item.IsLocked || PageLayerService.IsContentLocked(_currentPage, item.LayerId));
 
-        if (deletingObjectIds.Count > 0)
-        {
-            _currentPage.Objects.RemoveAll(item => deletingObjectIds.Contains(item.Id));
-            foreach (var id in deletingObjectIds)
-            {
-                _selectedPageObjectIds.Remove(id);
-                if (_pageObjectContainers.Remove(id, out var removedContainer)) ObjectLayer.Children.Remove(removedContainer);
-            }
-            _selectedPageObjectIds.IntersectWith(_currentPage.Objects.Select(item => item.Id));
-            SetPrimarySelectionFromCurrentIds();
-            UpdatePageObjectSelectionVisuals();
-        }
+        _history.Record(InkSurface.Strokes);
+        CaptureCurrentPage();
+        var deletedStrokes = InkSelectionService.Delete(_currentPage, strokeIds);
+        var beforeObjects = _currentPage.Objects.Count;
+        PageObjectEditingService.Delete(_currentPage, objectIds);
+        var deletedObjects = beforeObjects - _currentPage.Objects.Count;
+        if (deletedStrokes + deletedObjects == 0) return false;
 
-        _currentPage.ModifiedAt = DateTimeOffset.Now;
-        UpdateCurrentPageThumbnail();
-        MarkDirty();
-
-        var lockedSelectedCount = SelectedPageObjects().Count(item => item.IsLocked);
-        var deletedParts = new List<string>();
-        if (selectedStrokeCount > 0) deletedParts.Add($"{selectedStrokeCount} 条笔迹");
-        if (deletingObjectIds.Count > 0) deletedParts.Add($"{deletingObjectIds.Count} 个对象");
-        StatusText.Text = $"已删除 {string.Join("和", deletedParts)}" +
-                          (lockedSelectedCount > 0 ? $"，保留 {lockedSelectedCount} 个锁定对象" : string.Empty);
+        RefreshCurrentPageFromModel([], []);
+        UpdateHistoryButtons();
+        var kept = lockedStrokeCount + lockedObjectCount;
+        StatusText.Text = $"已删除 {deletedStrokes} 条笔迹和 {deletedObjects} 个对象" +
+                          (kept > 0 ? $"，保留 {kept} 项锁定内容" : string.Empty);
         return true;
     }
 
@@ -222,8 +470,12 @@ public partial class MainWindow
     {
         var inkCount = InkSurface.GetSelectedStrokes().Count;
         var objectCount = _selectedPageObjectIds.Count;
-        StatusText.Text = inkCount == 0 && objectCount == 0
-            ? "套索范围内没有内容"
-            : $"已选择 {inkCount} 条笔迹和 {objectCount} 个对象";
+        StatusText.Text = (inkCount, objectCount) switch
+        {
+            (0, 0) => $"套索范围内没有内容 · {MixedSelectionFilterName(_mixedSelectionFilter)}",
+            (> 0, 0) => $"已选择 {inkCount} 条笔迹",
+            (0, > 0) => $"已选择 {objectCount} 个对象",
+            _ => $"已选择 {inkCount} 条笔迹和 {objectCount} 个对象"
+        };
     }
 }

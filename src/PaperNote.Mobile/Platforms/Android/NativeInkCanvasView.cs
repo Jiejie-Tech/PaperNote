@@ -46,11 +46,10 @@ public sealed class NativeInkCanvasView : View
     private string _loadedBackground = string.Empty;
     private Guid? _selectedObjectId;
     private readonly HashSet<Guid> _selectedObjectIds = [];
+    private readonly HashSet<Guid> _selectedStrokeIds = [];
+    private readonly List<PaperInkPoint> _lassoPoints = [];
+    private PageSelectionFilter _selectionFilter = PageSelectionFilter.All;
     private bool _lassoSelecting;
-    private float _lassoStartX;
-    private float _lassoStartY;
-    private float _lassoCurrentX;
-    private float _lassoCurrentY;
     private bool _objectDragging;
     private bool _objectResizing;
     private bool _objectChanged;
@@ -70,7 +69,9 @@ public sealed class NativeInkCanvasView : View
     public event EventHandler? SelectionChanged;
     public Guid? SelectedObjectId => _selectedObjectId;
     public int SelectedObjectCount => _selectedObjectIds.Count;
+    public int SelectedStrokeCount => _selectedStrokeIds.Count;
     public IReadOnlyCollection<Guid> SelectedObjectIds => _selectedObjectIds.ToArray();
+    public IReadOnlyCollection<Guid> SelectedStrokeIds => _selectedStrokeIds.ToArray();
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
 
@@ -90,13 +91,18 @@ public sealed class NativeInkCanvasView : View
             SetSelectedObject(null);
         }
         _tool = view.Tool;
-        if (_tool != InkCanvasTool.Select && _selectedObjectId.HasValue) SetSelectedObject(null);
+        if (_tool != InkCanvasTool.Select && (_selectedObjectIds.Count > 0 || _selectedStrokeIds.Count > 0)) ClearSelection();
         _inkColor = view.InkColor;
         _inkWidth = view.InkWidth;
         _inkOpacity = view.InkOpacity;
         _fingerDrawing = view.FingerDrawingEnabled;
         _eraserMode = view.EraserMode;
         _smoothingEnabled = view.SmoothingEnabled;
+        if (_selectionFilter != view.SelectionFilter)
+        {
+            _selectionFilter = view.SelectionFilter;
+            if (_selectedObjectIds.Count > 0 || _selectedStrokeIds.Count > 0) ClearSelection();
+        }
         LoadBackgroundIfNeeded();
         Invalidate();
     }
@@ -503,7 +509,9 @@ public sealed class NativeInkCanvasView : View
         _document.Strokes = snapshot.Ink.Strokes.Select(stroke => stroke.Clone()).ToList();
         _inkSpatialIndex.Rebuild(_document);
         if (_page is not null) _page.Objects = snapshot.Objects.Select(item => item.Clone()).ToList();
-        if (_page is not null) SetSelection(_selectedObjectIds.Where(id => _page.Objects.Any(item => item.Id == id)));
+        if (_page is not null) SetSelection(
+            _selectedObjectIds.Where(id => _page.Objects.Any(item => item.Id == id)),
+            _selectedStrokeIds.Where(id => _document.Strokes.Any(stroke => stroke.Id == id)));
         Invalidate();
         InkChanged?.Invoke(this, EventArgs.Empty);
         HistoryChanged?.Invoke(this, EventArgs.Empty);
@@ -512,22 +520,22 @@ public sealed class NativeInkCanvasView : View
     private void DrawSelection(Canvas canvas)
     {
         if (_tool != InkCanvasTool.Select || _page is null) return;
-        if (_lassoSelecting)
+        if (_lassoSelecting && _lassoPoints.Count > 1)
         {
-            var lasso = NormalizeBounds(_lassoStartX, _lassoStartY, _lassoCurrentX, _lassoCurrentY);
-            _paint.SetStyle(Paint.Style.Fill);
-            _paint.Color = Color.Argb(28, 49, 87, 213);
-            canvas.DrawRect((float)lasso.X, (float)lasso.Y, (float)lasso.Right, (float)lasso.Bottom, _paint);
+            using var path = new Path();
+            path.MoveTo((float)_lassoPoints[0].X, (float)_lassoPoints[0].Y);
+            foreach (var point in _lassoPoints.Skip(1)) path.LineTo((float)point.X, (float)point.Y);
             _paint.SetStyle(Paint.Style.Stroke);
             _paint.StrokeWidth = 2f;
             _paint.Color = Color.Rgb(49, 87, 213);
             using var lassoDash = new DashPathEffect([10, 7], 0);
             _paint.SetPathEffect(lassoDash);
-            canvas.DrawRect((float)lasso.X, (float)lasso.Y, (float)lasso.Right, (float)lasso.Bottom, _paint);
+            canvas.DrawPath(path, _paint);
             _paint.SetPathEffect(null);
         }
-        if (_selectedObjectIds.Count == 0) return;
-        var bounds = PageObjectEditingService.GetBounds(_page, _selectedObjectIds);
+
+        if (_selectedObjectIds.Count == 0 && _selectedStrokeIds.Count == 0) return;
+        var bounds = PageSelectionService.GetCombinedBounds(_page, _selectedStrokeIds, _selectedObjectIds);
         if (bounds is null) return;
         var box = bounds.Value;
         _paint.SetStyle(Paint.Style.Stroke);
@@ -544,7 +552,7 @@ public sealed class NativeInkCanvasView : View
         _paint.StrokeWidth = 3f;
         _paint.Color = Color.Rgb(49, 87, 213);
         canvas.DrawCircle((float)box.Right, (float)box.Bottom, 12, _paint);
-        if (_selectedObjectIds.Any(id => _page.Objects.FirstOrDefault(item => item.Id == id)?.IsLocked == true))
+        if (!SelectionCanTransform())
         {
             _paint.SetStyle(Paint.Style.Fill);
             _paint.Color = Color.Rgb(239, 143, 40);
@@ -570,7 +578,8 @@ public sealed class NativeInkCanvasView : View
                 _objectChanged = false;
                 _objectUndoPushed = false;
                 _lassoSelecting = false;
-                var selectedBounds = PageObjectEditingService.GetBounds(_page, _selectedObjectIds);
+                _lassoPoints.Clear();
+                var selectedBounds = PageSelectionService.GetCombinedBounds(_page, _selectedStrokeIds, _selectedObjectIds);
                 var handleTolerance = 28 / scale;
                 if (selectedBounds is PageObjectBounds current &&
                     Distance(pageX, pageY, current.Right, current.Bottom) <= handleTolerance &&
@@ -585,11 +594,43 @@ public sealed class NativeInkCanvasView : View
                     return true;
                 }
 
-                var hit = PageObjectEditingService.HitTest(_page, pageX, pageY, 10 / scale);
-                if (hit is not null)
+                var hitObject = CanSelectObjects() ? PageObjectEditingService.HitTest(_page, pageX, pageY, 10 / scale) : null;
+                if (hitObject is not null && !MatchesObjectFilter(hitObject)) hitObject = null;
+                var hitStrokeId = CanSelectInk()
+                    ? InkSelectionService.HitTest(_document, pageX, pageY, 10 / scale, MapInkFilter())
+                    : null;
+                if (hitStrokeId is Guid candidateId)
                 {
-                    SetSelection(PageObjectEditingService.ExpandSelection(_page, [hit.Id]));
-                    if (!hit.IsLocked && !PageLayerService.IsContentLocked(_page, hit.LayerId))
+                    var stroke = _document.Strokes.FirstOrDefault(item => item.Id == candidateId);
+                    if (stroke is null || !PageLayerService.IsContentVisible(_page, stroke.LayerId)) hitStrokeId = null;
+                }
+
+                var pointInsideSelection = selectedBounds is PageObjectBounds selected &&
+                    pageX >= selected.X && pageX <= selected.Right && pageY >= selected.Y && pageY <= selected.Bottom;
+                if (pointInsideSelection && SelectionCanTransform())
+                {
+                    _objectDragging = true;
+                    _objectStartX = pageX;
+                    _objectStartY = pageY;
+                    PushUndo();
+                    _objectUndoPushed = true;
+                }
+                else if (hitObject is not null)
+                {
+                    SetSelection(PageObjectEditingService.ExpandSelection(_page, [hitObject.Id]), []);
+                    if (SelectionCanTransform())
+                    {
+                        _objectDragging = true;
+                        _objectStartX = pageX;
+                        _objectStartY = pageY;
+                        PushUndo();
+                        _objectUndoPushed = true;
+                    }
+                }
+                else if (hitStrokeId is Guid strokeId)
+                {
+                    SetSelection([], [strokeId]);
+                    if (SelectionCanTransform())
                     {
                         _objectDragging = true;
                         _objectStartX = pageX;
@@ -600,12 +641,11 @@ public sealed class NativeInkCanvasView : View
                 }
                 else
                 {
-                    SetSelection([]);
+                    ClearSelection();
                     if (pageX is >= 0 and <= PageWidth && pageY is >= 0 and <= PageHeight)
                     {
                         _lassoSelecting = true;
-                        _lassoStartX = _lassoCurrentX = pageX;
-                        _lassoStartY = _lassoCurrentY = pageY;
+                        _lassoPoints.Add(new PaperInkPoint { X = pageX, Y = pageY });
                     }
                 }
                 return true;
@@ -613,27 +653,35 @@ public sealed class NativeInkCanvasView : View
             case MotionEventActions.Move:
                 if (_lassoSelecting)
                 {
-                    _lassoCurrentX = Math.Clamp(pageX, 0, PageWidth);
-                    _lassoCurrentY = Math.Clamp(pageY, 0, PageHeight);
+                    var lassoX = Math.Clamp(pageX, 0, PageWidth);
+                    var lassoY = Math.Clamp(pageY, 0, PageHeight);
+                    if (_lassoPoints.Count == 0 || Distance(_lassoPoints[^1].X, _lassoPoints[^1].Y, lassoX, lassoY) >= 3)
+                        _lassoPoints.Add(new PaperInkPoint { X = lassoX, Y = lassoY });
                     Invalidate();
                 }
                 else if (_objectDragging)
                 {
                     var dx = pageX - _objectStartX;
                     var dy = pageY - _objectStartY;
-                    if (PageObjectEditingService.Move(_page, _selectedObjectIds, dx, dy))
+                    var changed = PageSelectionService.Move(_page, _selectedStrokeIds, _selectedObjectIds, dx, dy);
+                    if (changed)
                     {
                         _objectStartX = pageX;
                         _objectStartY = pageY;
                         _objectChanged = true;
+                        _inkSpatialIndex.Rebuild(_document);
                         Invalidate();
                     }
                 }
                 else if (_objectResizing && _objectStartBounds is PageObjectBounds resizeStart)
                 {
-                    if (PageObjectEditingService.Resize(_page, _selectedObjectIds, resizeStart.Width + pageX - _objectStartX, resizeStart.Height + pageY - _objectStartY))
+                    var targetWidth = resizeStart.Width + pageX - _objectStartX;
+                    var targetHeight = resizeStart.Height + pageY - _objectStartY;
+                    var changed = PageSelectionService.Resize(_page, _selectedStrokeIds, _selectedObjectIds, targetWidth, targetHeight);
+                    if (changed)
                     {
                         _objectChanged = true;
+                        _inkSpatialIndex.Rebuild(_document);
                         Invalidate();
                     }
                 }
@@ -642,11 +690,14 @@ public sealed class NativeInkCanvasView : View
             case MotionEventActions.Cancel:
                 if (_lassoSelecting)
                 {
-                    _lassoCurrentX = Math.Clamp(pageX, 0, PageWidth);
-                    _lassoCurrentY = Math.Clamp(pageY, 0, PageHeight);
+                    var lassoX = Math.Clamp(pageX, 0, PageWidth);
+                    var lassoY = Math.Clamp(pageY, 0, PageHeight);
+                    if (_lassoPoints.Count == 0 || Distance(_lassoPoints[^1].X, _lassoPoints[^1].Y, lassoX, lassoY) >= 1)
+                        _lassoPoints.Add(new PaperInkPoint { X = lassoX, Y = lassoY });
                     if (e.ActionMasked == MotionEventActions.Up) SelectByLasso();
                 }
                 _lassoSelecting = false;
+                _lassoPoints.Clear();
                 _objectDragging = false;
                 _objectResizing = false;
                 _objectStartBounds = null;
@@ -663,45 +714,80 @@ public sealed class NativeInkCanvasView : View
 
     private void SelectByLasso()
     {
-        if (_page is null) return;
-        var box = NormalizeBounds(_lassoStartX, _lassoStartY, _lassoCurrentX, _lassoCurrentY);
-        if (box.Width < 6 && box.Height < 6) { SetSelection([]); return; }
-        var ids = _page.Objects
-            .Where(item => !item.IsHidden && PageLayerService.IsContentVisible(_page, item.LayerId))
-            .Where(item => item.X <= box.Right && item.X + item.Width >= box.X && item.Y <= box.Bottom && item.Y + item.Height >= box.Y)
-            .Select(item => item.Id)
-            .ToArray();
-        SetSelection(PageObjectEditingService.ExpandSelection(_page, ids));
+        if (_page is null || _lassoPoints.Count < 3)
+        {
+            ClearSelection();
+            return;
+        }
+        var minX = _lassoPoints.Min(point => point.X);
+        var maxX = _lassoPoints.Max(point => point.X);
+        var minY = _lassoPoints.Min(point => point.Y);
+        var maxY = _lassoPoints.Max(point => point.Y);
+        if (maxX - minX < 6 && maxY - minY < 6) { ClearSelection(); return; }
+        var result = PageSelectionService.SelectByPolygon(_page, _lassoPoints, _selectionFilter);
+        var visibleStrokes = result.StrokeIds.Where(id =>
+        {
+            var stroke = _document.Strokes.FirstOrDefault(item => item.Id == id);
+            return stroke is not null && PageLayerService.IsContentVisible(_page, stroke.LayerId);
+        });
+        SetSelection(result.ObjectIds, visibleStrokes);
     }
 
     private bool SelectionCanTransform()
-        => _page is not null && _selectedObjectIds.Count > 0 && _selectedObjectIds
+    {
+        if (_page is null || _selectedObjectIds.Count + _selectedStrokeIds.Count == 0) return false;
+        var objectsEditable = _selectedObjectIds
             .Select(id => _page.Objects.FirstOrDefault(item => item.Id == id))
-            .Where(item => item is not null)
-            .All(item => item!.IsLocked == false && !PageLayerService.IsContentLocked(_page, item.LayerId));
+            .Any(item => item is not null && !item.IsLocked && !PageLayerService.IsContentLocked(_page, item.LayerId));
+        var inkEditable = _selectedStrokeIds
+            .Select(id => _document.Strokes.FirstOrDefault(stroke => stroke.Id == id))
+            .Any(stroke => stroke is not null && !PageLayerService.IsContentLocked(_page, stroke.LayerId));
+        return objectsEditable || inkEditable;
+    }
+
+    private bool CanSelectInk() => _selectionFilter is PageSelectionFilter.All or PageSelectionFilter.Ink or PageSelectionFilter.Pen or PageSelectionFilter.Highlighter;
+    private bool CanSelectObjects() => _selectionFilter is PageSelectionFilter.All or PageSelectionFilter.Objects or PageSelectionFilter.Text or PageSelectionFilter.Image or PageSelectionFilter.Shape;
+    private InkSelectionFilter MapInkFilter() => _selectionFilter switch
+    {
+        PageSelectionFilter.Pen => InkSelectionFilter.Pen,
+        PageSelectionFilter.Highlighter => InkSelectionFilter.Highlighter,
+        _ => InkSelectionFilter.All
+    };
+    private bool MatchesObjectFilter(PageObject item) => _selectionFilter switch
+    {
+        PageSelectionFilter.Text => item.Kind == "Text",
+        PageSelectionFilter.Image => item.Kind == "Image",
+        PageSelectionFilter.Shape => item.Kind == "Shape",
+        _ => CanSelectObjects()
+    };
 
     private static PageObjectBounds NormalizeBounds(double x1, double y1, double x2, double y2)
         => new(Math.Min(x1, x2), Math.Min(y1, y2), Math.Abs(x2 - x1), Math.Abs(y2 - y1));
 
     public void SelectObject(Guid? objectId)
     {
-        if (_page is null || objectId is not Guid id || _page.Objects.All(item => item.Id != id)) SetSelection([]);
-        else SetSelection(PageObjectEditingService.ExpandSelection(_page, [id]));
+        if (_page is null || objectId is not Guid id || _page.Objects.All(item => item.Id != id)) ClearSelection();
+        else SetSelection(PageObjectEditingService.ExpandSelection(_page, [id]), []);
     }
 
     private void SetSelectedObject(Guid? objectId) => SelectObject(objectId);
 
-    private void SetSelection(IEnumerable<Guid> objectIds)
+    private void SetSelection(IEnumerable<Guid> objectIds, IEnumerable<Guid>? strokeIds = null)
     {
-        var valid = _page is null ? [] : objectIds.Where(id => _page.Objects.Any(item => item.Id == id)).Distinct().ToArray();
-        if (_selectedObjectIds.SetEquals(valid)) return;
+        var validObjects = _page is null ? [] : objectIds.Where(id => _page.Objects.Any(item => item.Id == id)).Distinct().ToArray();
+        var validStrokes = strokeIds?.Where(id => _document.Strokes.Any(stroke => stroke.Id == id)).Distinct().ToArray() ?? [];
+        if (_selectedObjectIds.SetEquals(validObjects) && _selectedStrokeIds.SetEquals(validStrokes)) return;
         _selectedObjectIds.Clear();
-        foreach (var id in valid) _selectedObjectIds.Add(id);
-        _selectedObjectId = valid.FirstOrDefault();
+        foreach (var id in validObjects) _selectedObjectIds.Add(id);
+        _selectedStrokeIds.Clear();
+        foreach (var id in validStrokes) _selectedStrokeIds.Add(id);
+        _selectedObjectId = validObjects.FirstOrDefault();
         if (_selectedObjectId == Guid.Empty) _selectedObjectId = null;
         SelectionChanged?.Invoke(this, EventArgs.Empty);
         Invalidate();
     }
+
+    public void ClearSelection() => SetSelection([], []);
 
     private void NotifyContentChanged()
     {
@@ -710,61 +796,73 @@ public sealed class NativeInkCanvasView : View
         Invalidate();
     }
 
-    private bool MutateSelection(Func<NotebookPage, IReadOnlyCollection<Guid>, bool> mutation)
+    private bool MutateSelection(Func<NotebookPage, IReadOnlyCollection<Guid>, IReadOnlyCollection<Guid>, bool> mutation)
     {
-        if (_page is null || _selectedObjectIds.Count == 0) return false;
-        var ids = _selectedObjectIds.ToArray();
+        if (_page is null || _selectedObjectIds.Count + _selectedStrokeIds.Count == 0) return false;
+        var objectIds = _selectedObjectIds.ToArray();
+        var strokeIds = _selectedStrokeIds.ToArray();
         PushUndo();
-        if (!mutation(_page, ids))
+        if (!mutation(_page, objectIds, strokeIds))
         {
             _undo.Pop();
             HistoryChanged?.Invoke(this, EventArgs.Empty);
             return false;
         }
-        SetSelection(ids.Where(id => _page.Objects.Any(item => item.Id == id)));
+        _inkSpatialIndex.Rebuild(_document);
+        SetSelection(
+            objectIds.Where(id => _page.Objects.Any(item => item.Id == id)),
+            strokeIds.Where(id => _document.Strokes.Any(stroke => stroke.Id == id)));
         NotifyContentChanged();
         return true;
     }
 
     public void DuplicateSelection()
     {
-        if (_page is null || _selectedObjectIds.Count == 0) return;
+        if (_page is null || _selectedObjectIds.Count + _selectedStrokeIds.Count == 0) return;
         PushUndo();
-        var ids = PageObjectEditingService.Duplicate(_page, _selectedObjectIds);
-        if (ids.Count == 0) { _undo.Pop(); HistoryChanged?.Invoke(this, EventArgs.Empty); return; }
-        SetSelection(ids);
+        var objectIds = PageObjectEditingService.Duplicate(_page, _selectedObjectIds);
+        var strokeIds = InkSelectionService.Duplicate(_page, _selectedStrokeIds);
+        if (objectIds.Count + strokeIds.Count == 0) { _undo.Pop(); HistoryChanged?.Invoke(this, EventArgs.Empty); return; }
+        _inkSpatialIndex.Rebuild(_document);
+        SetSelection(objectIds, strokeIds);
         NotifyContentChanged();
     }
 
     public void DeleteSelection()
     {
-        if (MutateSelection((page, ids) => PageObjectEditingService.Delete(page, ids))) SetSelection([]);
+        if (MutateSelection((page, objects, strokes) =>
+        {
+            var objectsDeleted = PageObjectEditingService.Delete(page, objects);
+            var strokesDeleted = InkSelectionService.Delete(page, strokes) > 0;
+            return objectsDeleted || strokesDeleted;
+        })) ClearSelection();
     }
 
-    public void RotateSelection(double degrees) => MutateSelection((page, ids) => PageObjectEditingService.Rotate(page, ids, degrees));
-    public void BringSelectionToFront() => MutateSelection((page, ids) => PageObjectEditingService.BringToFront(page, ids));
-    public void SendSelectionToBack() => MutateSelection((page, ids) => PageObjectEditingService.SendToBack(page, ids));
+    public void RotateSelection(double degrees) => MutateSelection((page, objects, strokes) =>
+        PageSelectionService.Rotate(page, strokes, objects, degrees));
+    public void BringSelectionToFront() => MutateSelection((page, objects, _) => PageObjectEditingService.BringToFront(page, objects));
+    public void SendSelectionToBack() => MutateSelection((page, objects, _) => PageObjectEditingService.SendToBack(page, objects));
     public void GroupSelection()
     {
         if (_page is null || _selectedObjectIds.Count < 2) return;
-        MutateSelection((page, ids) => PageObjectEditingService.Group(page, ids).HasValue);
+        MutateSelection((page, objects, _) => PageObjectEditingService.Group(page, objects).HasValue);
     }
-    public void UngroupSelection() => MutateSelection((page, ids) => PageObjectEditingService.Ungroup(page, ids));
+    public void UngroupSelection() => MutateSelection((page, objects, _) => PageObjectEditingService.Ungroup(page, objects));
 
     public void ToggleSelectionLock()
     {
         if (_page is null || _selectedObjectIds.Count == 0) return;
         var selected = _page.Objects.Where(item => _selectedObjectIds.Contains(item.Id)).ToArray();
         var shouldLock = selected.Any(item => !item.IsLocked);
-        MutateSelection((page, ids) => PageObjectEditingService.SetLocked(page, ids, shouldLock));
+        MutateSelection((page, objects, _) => PageObjectEditingService.SetLocked(page, objects, shouldLock));
     }
 
     public void UpdateSelectedText(string text)
     {
-        if (_page is null || _selectedObjectIds.Count != 1) return;
-        MutateSelection((page, ids) =>
+        if (_page is null || _selectedObjectIds.Count != 1 || _selectedStrokeIds.Count > 0) return;
+        MutateSelection((page, objects, _) =>
         {
-            var selected = page.Objects.FirstOrDefault(item => ids.Contains(item.Id));
+            var selected = page.Objects.FirstOrDefault(item => objects.Contains(item.Id));
             if (selected is null || selected.IsLocked || selected.Kind != "Text") return false;
             selected.Text = text;
             page.ModifiedAt = DateTimeOffset.Now;
@@ -772,8 +870,10 @@ public sealed class NativeInkCanvasView : View
         });
     }
 
-    public void UpdateSelectionStyle(string strokeColor, double opacity)
-        => MutateSelection((page, ids) => PageObjectEditingService.UpdateStyle(page, ids, strokeColor: strokeColor, opacity: opacity));
+    public void UpdateSelectionStyle(string? strokeColor = null, double? opacity = null, double? inkWidth = null, PaperInkTool? inkTool = null)
+        => MutateSelection((page, objects, strokes) =>
+            PageObjectEditingService.UpdateStyle(page, objects, strokeColor: strokeColor, opacity: opacity) |
+            InkSelectionService.UpdateStyle(page, strokes, color: strokeColor, width: inkWidth, opacity: opacity, tool: inkTool));
 
     public void ResetViewport()
     {

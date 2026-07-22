@@ -978,10 +978,10 @@ public partial class MainWindow : Window
         _history.Record(InkSurface.Strokes); _isPointerActionActive = true; UpdateHistoryButtons();
     }
     private void EndPointerAction() => _isPointerActionActive = false;
-    private void InkSurface_SelectionMoving(object sender, InkCanvasSelectionEditingEventArgs e) => BeginSelectionAction();
-    private void InkSurface_SelectionMoved(object sender, EventArgs e) => EndSelectionAction();
-    private void InkSurface_SelectionResizing(object sender, InkCanvasSelectionEditingEventArgs e) => BeginSelectionAction();
-    private void InkSurface_SelectionResized(object sender, EventArgs e) => EndSelectionAction();
+    private void InkSurface_SelectionMoving(object sender, InkCanvasSelectionEditingEventArgs e) => BeginMixedSelectionEdit(e, resize: false);
+    private void InkSurface_SelectionMoved(object sender, EventArgs e) => EndMixedSelectionEdit();
+    private void InkSurface_SelectionResizing(object sender, InkCanvasSelectionEditingEventArgs e) => BeginMixedSelectionEdit(e, resize: true);
+    private void InkSurface_SelectionResized(object sender, EventArgs e) => EndMixedSelectionEdit();
 
     private void BeginSelectionAction()
     {
@@ -1225,11 +1225,3 @@ public partial class MainWindow : Window
 
     private string _activeToolDisplayName() => _activeTool switch { "Pen" => GetPenProfileDisplayName(_penProfile), "Highlighter" => "荧光笔", "Eraser" => "橡皮", "Select" => "套索", "Pan" => "浏览", _ => _activeTool };
 }
-
-
-
-
-
-
-
-

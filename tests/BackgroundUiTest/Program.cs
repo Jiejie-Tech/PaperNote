@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -284,19 +284,57 @@ internal static class Program
             lassoPage.Objects.Add(lassoOutsideObject);
             SetField(window, "_currentPage", lassoPage);
             Invoke(window, "LoadPage", lassoPage);
+            var lassoInkSurface = (InkCanvas)(window.FindName("InkSurface") ?? throw new InvalidOperationException("Missing ink canvas."));
+            var lassoLockedLayer = new PageLayer { Name = "Locked lasso layer", IsLocked = true };
+            lassoPage.Layers.Add(lassoLockedLayer);
+            WpfInkAdapter.SetLayerId(lassoInkSurface.Strokes[1], lassoLockedLayer.Id);
             SetField(window, "_activeTool", "Select");
             Invoke(window, "ApplyMixedLassoSelection", new List<Point>
             {
                 new(50, 50), new(280, 50), new(280, 280), new(50, 280), new(50, 50)
             }, false);
-            var lassoInkSurface = (InkCanvas)(window.FindName("InkSurface") ?? throw new InvalidOperationException("Missing ink canvas."));
             Assert(lassoInkSurface.GetSelectedStrokes().Count == 1, "Region mixed lasso should hit only the ink inside the polygon.");
             Assert(GetField<HashSet<Guid>>(window, "_selectedPageObjectIds").SetEquals(new[] { lassoInsideObject.Id }), "Region mixed lasso should hit the page object inside the polygon.");
+            SetField(window, "_mixedSelectionFilter", PageSelectionFilter.Objects);
+            Invoke(window, "ApplyMixedLassoSelection", new List<Point>
+            {
+                new(50, 50), new(280, 50), new(280, 280), new(50, 280), new(50, 50)
+            }, false);
+            Assert(lassoInkSurface.GetSelectedStrokes().Count == 0 && GetField<HashSet<Guid>>(window, "_selectedPageObjectIds").SetEquals(new[] { lassoInsideObject.Id }), "Object-only lasso filtering should exclude ink.");
+            SetField(window, "_mixedSelectionFilter", PageSelectionFilter.Highlighter);
+            Invoke(window, "ApplyMixedLassoSelection", new List<Point>
+            {
+                new(50, 50), new(280, 50), new(280, 280), new(50, 280), new(50, 50)
+            }, false);
+            Assert(lassoInkSurface.GetSelectedStrokes().Count == 0 && GetField<HashSet<Guid>>(window, "_selectedPageObjectIds").Count == 0, "Highlighter-only lasso filtering should exclude pen ink and objects.");
+            SetField(window, "_mixedSelectionFilter", PageSelectionFilter.All);
+            Invoke(window, "ApplyMixedLassoSelection", new List<Point>
+            {
+                new(50, 50), new(280, 50), new(280, 280), new(50, 280), new(50, 50)
+            }, false);
             Invoke(window, "ApplyMixedLassoSelection", new List<Point>
             {
                 new(560, 760), new(800, 760), new(800, 1000), new(560, 1000), new(560, 760)
             }, true);
-            Assert(lassoInkSurface.GetSelectedStrokes().Count == 2 && GetField<HashSet<Guid>>(window, "_selectedPageObjectIds").Count == 2, "Ctrl-style additive lasso should keep the previous mixed selection.");
+            Assert(lassoInkSurface.GetSelectedStrokes().Count == 1 && GetField<HashSet<Guid>>(window, "_selectedPageObjectIds").Count == 2, "Ctrl-style additive lasso should keep editable content while excluding ink on locked layers.");
+
+            lassoOutsideObject.IsLocked = true;
+            var inkOrigin = lassoInkSurface.GetSelectionBounds();
+            var insideMoveX = lassoInsideObject.X;
+            var insideMoveY = lassoInsideObject.Y;
+            var lockedMoveX = lassoOutsideObject.X;
+            var lockedMoveY = lassoOutsideObject.Y;
+            Invoke(window, "BeginMixedSelectionEdit", CreateSelectionEditingArgs(inkOrigin, new Rect(inkOrigin.X + 30, inkOrigin.Y + 20, inkOrigin.Width, inkOrigin.Height)), false);
+            Assert(Math.Abs(lassoInsideObject.X - (insideMoveX + 30)) < .001 && Math.Abs(lassoInsideObject.Y - (insideMoveY + 20)) < .001, "Mixed drag should move editable objects by the same delta as selected ink.");
+            Assert(Math.Abs(lassoOutsideObject.X - lockedMoveX) < .001 && Math.Abs(lassoOutsideObject.Y - lockedMoveY) < .001, "Mixed drag must leave locked objects unchanged.");
+            Invoke(window, "EndMixedSelectionEdit");
+
+            var insideResizeOrigin = lassoInsideObject.Clone();
+            var lockedResizeOrigin = lassoOutsideObject.Clone();
+            Invoke(window, "BeginMixedSelectionEdit", CreateSelectionEditingArgs(inkOrigin, new Rect(inkOrigin.X, inkOrigin.Y, inkOrigin.Width * 1.5, inkOrigin.Height * 2)), true);
+            Assert(Math.Abs(lassoInsideObject.Width - insideResizeOrigin.Width * 1.5) < .001 && Math.Abs(lassoInsideObject.Height - insideResizeOrigin.Height * 2) < .001, "Mixed resize should scale editable object dimensions with selected ink.");
+            Assert(Math.Abs(lassoOutsideObject.Width - lockedResizeOrigin.Width) < .001 && Math.Abs(lassoOutsideObject.Height - lockedResizeOrigin.Height) < .001, "Mixed resize must leave locked objects unchanged.");
+            Invoke(window, "EndMixedSelectionEdit");
             Invoke(window, "ClearMixedSelection");
 
             SetField(window, "_currentPage", page);
@@ -308,6 +346,10 @@ internal static class Program
             SetField(window, "_activeTool", "Select");
             Assert((bool)(Invoke(window, "SelectAllInkAndPageObjects") ?? false), "Mixed select-all should select page ink and objects together.");
             Assert(mixedInkSurface.GetSelectedStrokes().Count == mixedInkSurface.Strokes.Count && GetField<HashSet<Guid>>(window, "_selectedPageObjectIds").Count == page.Objects.Count, "Mixed select-all counts are incorrect.");
+            Assert(window.FindName("SelectionActionsButton") is Button, "The Windows toolbar should expose mixed selection actions.");
+            var selectionMenu = (ContextMenu)(Invoke(window, "CreateSelectionActionsMenu") ?? throw new InvalidOperationException("Missing mixed selection menu."));
+            Assert(MenuContainsHeader(selectionMenu.Items, "全部内容") && MenuContainsHeader(selectionMenu.Items, "仅钢笔") && MenuContainsHeader(selectionMenu.Items, "仅荧光笔") && MenuContainsHeader(selectionMenu.Items, "仅文字") && MenuContainsHeader(selectionMenu.Items, "仅图片") && MenuContainsHeader(selectionMenu.Items, "仅形状"), "Mixed selection menu should expose all ink and object filters.");
+            Assert(MenuContainsHeader(selectionMenu.Items, "设置透明度") && MenuContainsHeader(selectionMenu.Items, "设置笔迹粗细") && MenuContainsHeader(selectionMenu.Items, "设置笔迹类型") && MenuContainsHeader(selectionMenu.Items, "复制到其他页面") && MenuContainsHeader(selectionMenu.Items, "移动到其他页面"), "Mixed selection menu should expose batch style and cross-page actions.");
             var objectsBeforeMixedDelete = page.Objects.Count;
             Assert((bool)(Invoke(window, "DeleteMixedSelection") ?? false), "Mixed delete should remove selected ink and editable objects in one operation.");
             Assert(mixedInkSurface.Strokes.Count == 0 && page.Objects.Count == 1 && page.Objects[0].Id == mixedLockObject.Id, "Mixed delete should retain the locked object only.");
@@ -841,6 +883,16 @@ internal static class Program
             hash *= 1099511628211;
         }
         return hash;
+    }
+
+    private static InkCanvasSelectionEditingEventArgs CreateSelectionEditingArgs(Rect oldRectangle, Rect newRectangle)
+    {
+        var constructor = typeof(InkCanvasSelectionEditingEventArgs).GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            [typeof(Rect), typeof(Rect)],
+            modifiers: null) ?? throw new MissingMethodException(typeof(InkCanvasSelectionEditingEventArgs).FullName, ".ctor(Rect, Rect)");
+        return (InkCanvasSelectionEditingEventArgs)constructor.Invoke([oldRectangle, newRectangle]);
     }
 
     private static object? Invoke(object target, string methodName, params object?[] arguments)

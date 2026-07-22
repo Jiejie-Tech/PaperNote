@@ -69,12 +69,20 @@ internal static class Program
         legacyStrokes[0].DrawingAttributes.Color = Color.FromRgb(49, 87, 213);
         legacyStrokes[0].DrawingAttributes.Width = 5;
         legacyStrokes[0].DrawingAttributes.Height = 5;
+        var sourceLayerId = Guid.NewGuid();
+        WpfInkAdapter.SetLayerId(legacyStrokes[0], sourceLayerId);
+        WpfInkAdapter.SetOpacity(legacyStrokes[0], .62);
+        var stableStrokeId = WpfInkAdapter.GetStrokeId(legacyStrokes[0]);
         var portableInk = WpfInkAdapter.ToPaperInk(legacyStrokes);
         Assert(portableInk.Strokes.Count == 1 && portableInk.Strokes[0].Points.Count == 3, "WPF ISF should convert to PaperInk");
         Assert(portableInk.Strokes[0].Color == "#3157D5" && portableInk.Strokes[0].Width == 5, "WPF ink style should survive PaperInk conversion");
+        Assert(portableInk.Strokes[0].Id == stableStrokeId && portableInk.Strokes[0].LayerId == sourceLayerId, "WPF stroke identity and layer should survive PaperInk conversion");
+        Assert(Math.Abs(portableInk.Strokes[0].Opacity - .62) < .001, "WPF custom opacity should survive PaperInk conversion");
         var restoredWpf = WpfInkAdapter.ToStrokeCollection(portableInk);
         Assert(restoredWpf.Count == 1 && restoredWpf[0].StylusPoints.Count == 3, "PaperInk should convert back to WPF strokes");
         Assert(restoredWpf[0].DrawingAttributes.Color.R == 49 && restoredWpf[0].DrawingAttributes.Width == 5, "PaperInk style should convert back to WPF");
+        Assert(WpfInkAdapter.GetStrokeId(restoredWpf[0]) == stableStrokeId && WpfInkAdapter.GetLayerId(restoredWpf[0]) == sourceLayerId, "PaperInk identity and layer should survive the WPF round trip");
+        Assert(Math.Abs(WpfInkAdapter.GetOpacity(restoredWpf[0]) - .62) < .001, "PaperInk opacity should survive the WPF round trip");
         var portableOnlyPage = new NotebookPage { Ink = portableInk.Clone(), InkData = string.Empty };
         Assert(WpfInkAdapter.GetPageStrokes(portableOnlyPage).Count == 1, "Windows should read Android PaperInk");
         Assert(PageThumbnailService.CreatePageBitmap(portableOnlyPage, 150, 212) is RenderTargetBitmap, "PaperInk-only pages should render Windows thumbnails");
@@ -564,4 +572,3 @@ internal static class Program
         if (!condition) throw new InvalidOperationException(message);
     }
 }
-

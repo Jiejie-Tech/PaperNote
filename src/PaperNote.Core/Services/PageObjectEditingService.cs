@@ -57,7 +57,7 @@ public static class PageObjectEditingService
 
     public static PageObjectBounds? GetBounds(NotebookPage page, IEnumerable<Guid> objectIds)
     {
-        var selected = Selected(page, objectIds, includeLocked: true).ToArray();
+        var selected = Selected(page, objectIds, includeLocked: true, includeLayerLocked: true).ToArray();
         if (selected.Length == 0) return null;
         var left = selected.Min(item => item.X);
         var top = selected.Min(item => item.Y);
@@ -148,7 +148,7 @@ public static class PageObjectEditingService
     public static bool Delete(NotebookPage page, IEnumerable<Guid> objectIds)
     {
         var ids = ExpandSelection(page, objectIds).ToHashSet();
-        var removed = page.Objects.RemoveAll(item => ids.Contains(item.Id) && !item.IsLocked);
+        var removed = page.Objects.RemoveAll(item => ids.Contains(item.Id) && !item.IsLocked && !PageLayerService.IsContentLocked(page, item.LayerId));
         if (removed == 0) return false;
         Touch(page);
         return true;
@@ -181,7 +181,10 @@ public static class PageObjectEditingService
 
     public static bool Ungroup(NotebookPage page, IEnumerable<Guid> objectIds)
     {
-        var groups = Selected(page, objectIds, includeLocked: false).Where(item => item.GroupId.HasValue).Select(item => item.GroupId!.Value).ToHashSet();
+        var requestedGroups = Selected(page, objectIds, includeLocked: false).Where(item => item.GroupId.HasValue).Select(item => item.GroupId!.Value).ToHashSet();
+        var groups = requestedGroups.Where(groupId => page.Objects
+            .Where(item => item.GroupId == groupId)
+            .All(item => !item.IsLocked && !PageLayerService.IsContentLocked(page, item.LayerId))).ToHashSet();
         if (groups.Count == 0) return false;
         foreach (var item in page.Objects.Where(item => item.GroupId is Guid groupId && groups.Contains(groupId))) item.GroupId = null;
         Touch(page);
@@ -207,7 +210,7 @@ public static class PageObjectEditingService
     private static bool Reorder(NotebookPage page, IEnumerable<Guid> objectIds, bool bringToFront)
     {
         var ids = ExpandSelection(page, objectIds).ToHashSet();
-        var selected = page.Objects.Where(item => ids.Contains(item.Id) && !item.IsLocked).ToArray();
+        var selected = page.Objects.Where(item => ids.Contains(item.Id) && !item.IsLocked && !PageLayerService.IsContentLocked(page, item.LayerId)).ToArray();
         if (selected.Length == 0) return false;
         page.Objects.RemoveAll(item => selected.Contains(item));
         if (bringToFront) page.Objects.AddRange(selected); else page.Objects.InsertRange(0, selected);
@@ -215,11 +218,13 @@ public static class PageObjectEditingService
         return true;
     }
 
-    private static IEnumerable<PageObject> Selected(NotebookPage page, IEnumerable<Guid> ids, bool includeLocked)
+    private static IEnumerable<PageObject> Selected(NotebookPage page, IEnumerable<Guid> ids, bool includeLocked, bool includeLayerLocked = false)
     {
         ArgumentNullException.ThrowIfNull(page);
         var set = ids.ToHashSet();
-        return page.Objects.Where(item => set.Contains(item.Id) && (includeLocked || !item.IsLocked));
+        return page.Objects.Where(item => set.Contains(item.Id) &&
+            (includeLocked || !item.IsLocked) &&
+            (includeLayerLocked || !PageLayerService.IsContentLocked(page, item.LayerId)));
     }
 
     private static PageObjectBounds Bounds(IReadOnlyCollection<PageObject> items)

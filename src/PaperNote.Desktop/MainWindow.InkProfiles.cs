@@ -1,8 +1,9 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Ink;
 using System.Windows.Input;
 using System.Windows.Media;
+using PaperNote.Desktop.Services;
 
 namespace PaperNote.Desktop;
 
@@ -193,8 +194,10 @@ public partial class MainWindow
 
     private void InkSurface_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e)
     {
-        if (_activeTool != "Pen" || _isReadOnly) return;
-        ApplyStrokeProfile(e.Stroke, _pressureCurve, _strokeSmoothing, _penProfile);
+        if (_isReadOnly) return;
+        WpfInkAdapter.SetLayerId(e.Stroke, _currentPage?.ActiveLayerId);
+        _ = WpfInkAdapter.GetStrokeId(e.Stroke);
+        if (_activeTool == "Pen") ApplyStrokeProfile(e.Stroke, _pressureCurve, _strokeSmoothing, _penProfile);
     }
 
     private static void ApplyStrokeProfile(Stroke stroke, string pressureCurve, string smoothing, string profile)

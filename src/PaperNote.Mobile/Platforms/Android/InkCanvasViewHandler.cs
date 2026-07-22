@@ -1,4 +1,5 @@
 using Microsoft.Maui.Handlers;
+using PaperNote.Core.Ink;
 using PaperNote.Mobile.Controls;
 
 namespace PaperNote.Mobile.Platforms.Android;
@@ -15,7 +16,8 @@ public sealed class InkCanvasViewHandler : ViewHandler<InkCanvasView, NativeInkC
         [nameof(InkCanvasView.FingerDrawingEnabled)] = MapState,
         [nameof(InkCanvasView.InkOpacity)] = MapState,
         [nameof(InkCanvasView.EraserMode)] = MapState,
-        [nameof(InkCanvasView.SmoothingEnabled)] = MapState
+        [nameof(InkCanvasView.SmoothingEnabled)] = MapState,
+        [nameof(InkCanvasView.SelectionFilter)] = MapState
     };
 
     public InkCanvasViewHandler() : base(Mapper) { }
@@ -24,7 +26,9 @@ public sealed class InkCanvasViewHandler : ViewHandler<InkCanvasView, NativeInkC
     public bool CanRedo => PlatformView?.CanRedo == true;
     public Guid? SelectedObjectId => PlatformView?.SelectedObjectId;
     public int SelectedObjectCount => PlatformView?.SelectedObjectCount ?? 0;
+    public int SelectedStrokeCount => PlatformView?.SelectedStrokeCount ?? 0;
     public IReadOnlyCollection<Guid> SelectedObjectIds => PlatformView?.SelectedObjectIds ?? Array.Empty<Guid>();
+    public IReadOnlyCollection<Guid> SelectedStrokeIds => PlatformView?.SelectedStrokeIds ?? Array.Empty<Guid>();
 
     protected override NativeInkCanvasView CreatePlatformView() => new(Context);
 
@@ -64,7 +68,9 @@ public sealed class InkCanvasViewHandler : ViewHandler<InkCanvasView, NativeInkC
     public void SendSelectionToBack() => PlatformView?.SendSelectionToBack();
     public void ToggleSelectionLock() => PlatformView?.ToggleSelectionLock();
     public void UpdateSelectedText(string text) => PlatformView?.UpdateSelectedText(text);
-    public void UpdateSelectionStyle(string strokeColor, double opacity) => PlatformView?.UpdateSelectionStyle(strokeColor, opacity);
+    public void UpdateSelectionStyle(string? strokeColor = null, double? opacity = null, double? inkWidth = null, PaperInkTool? inkTool = null)
+        => PlatformView?.UpdateSelectionStyle(strokeColor, opacity, inkWidth, inkTool);
+    public void ClearSelection() => PlatformView?.ClearSelection();
     public void GroupSelection() => PlatformView?.GroupSelection();
     public void UngroupSelection() => PlatformView?.UngroupSelection();
 
