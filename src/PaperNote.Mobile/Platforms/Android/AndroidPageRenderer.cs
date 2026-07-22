@@ -1,6 +1,7 @@
 using Android.Graphics;
 using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
+using PaperNote.Core.Services;
 using AColor = Android.Graphics.Color;
 using Paint = Android.Graphics.Paint;
 using Path = Android.Graphics.Path;
@@ -22,8 +23,8 @@ internal static class AndroidPageRenderer
         canvas.DrawRect(0, 0, PageWidth, PageHeight, paint);
         DrawTemplate(canvas, page?.PaperTemplate, paint);
         if (background is not null && page is not null) DrawBackground(canvas, background, page, paint);
-        DrawStrokes(canvas, document, paint);
-        if (page is not null) DrawObjects(canvas, page.Objects, paint);
+        DrawStrokes(canvas, page, document, paint);
+        if (page is not null) DrawObjects(canvas, page, paint);
         paint.Alpha = 255;
     }
 
@@ -90,16 +91,16 @@ internal static class AndroidPageRenderer
         canvas.RestoreToCount(save);
     }
 
-    private static void DrawStrokes(Canvas canvas, PaperInkDocument document, Paint paint)
+    private static void DrawStrokes(Canvas canvas, NotebookPage? page, PaperInkDocument document, Paint paint)
     {
         foreach (var stroke in document.Strokes)
         {
-            if (stroke.Points.Count == 0) continue;
+            if (stroke.Points.Count == 0 || !PageLayerService.IsContentVisible(page, stroke.LayerId)) continue;
             paint.SetStyle(Paint.Style.Stroke);
             paint.StrokeCap = Paint.Cap.Round;
             paint.StrokeJoin = Paint.Join.Round;
             paint.Color = ParseColor(stroke.Color, AColor.Rgb(29, 37, 48));
-            paint.Alpha = (int)(255 * Math.Clamp(stroke.Opacity, 0.01, 1));
+            paint.Alpha = (int)(255 * PageLayerService.GetEffectiveOpacity(page, stroke.LayerId, stroke.Opacity));
             if (stroke.Points.Count == 1)
             {
                 var point = stroke.Points[0];
@@ -119,10 +120,11 @@ internal static class AndroidPageRenderer
         paint.Alpha = 255;
     }
 
-    private static void DrawObjects(Canvas canvas, IEnumerable<PageObject> objects, Paint paint)
+    private static void DrawObjects(Canvas canvas, NotebookPage page, Paint paint)
     {
-        foreach (var item in objects)
+        foreach (var item in page.Objects)
         {
+            if (item.IsHidden || !PageLayerService.IsContentVisible(page, item.LayerId)) continue;
             var left = (float)item.X;
             var top = (float)item.Y;
             var right = (float)(item.X + item.Width);
@@ -131,7 +133,7 @@ internal static class AndroidPageRenderer
             var save = canvas.Save();
             if (Math.Abs(item.Rotation) > 0.01)
                 canvas.Rotate((float)item.Rotation, rect.CenterX(), rect.CenterY());
-            paint.Alpha = (int)(255 * Math.Clamp(item.Opacity, 0.1, 1));
+            paint.Alpha = (int)(255 * PageLayerService.GetEffectiveOpacity(page, item.LayerId, item.Opacity));
 
             if (string.Equals(item.Kind, "Text", StringComparison.OrdinalIgnoreCase)) DrawText(canvas, item, rect, paint);
             else if (string.Equals(item.Kind, "Image", StringComparison.OrdinalIgnoreCase) && TryDecode(item.ImageData, out var image))
@@ -190,8 +192,8 @@ internal static class AndroidPageRenderer
         if (result.Count == maxLines && text.Length > result.Sum(line => line.Length))
         {
             var last = result[^1];
-            while (last.Length > 0 && paint.MeasureText(last + "?") > maxWidth) last = last[..^1];
-            result[^1] = last + "?";
+            while (last.Length > 0 && paint.MeasureText(last + "…") > maxWidth) last = last[..^1];
+            result[^1] = last + "…";
         }
         return result;
     }

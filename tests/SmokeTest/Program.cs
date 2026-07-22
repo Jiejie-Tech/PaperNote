@@ -238,7 +238,7 @@ internal static class Program
             await testService.SaveAsync(document, tempPath);
 
             var loaded = await testService.LoadAsync(tempPath);
-            Assert(loaded.FormatVersion == 14, "Format version should be 14.");
+            Assert(loaded.FormatVersion == 15, "Format version should be 15.");
             Assert(loaded.LastOpenedAt == document.LastOpenedAt, "最近打开时间应往返保持。");
             Assert(loaded.FolderName == "课程" && loaded.CoverStyle == "Purple", "文件夹与封面应往返保持");
             Assert(!loaded.IsInTrash && loaded.TrashedAt is null, "新笔记本默认不在回收站");

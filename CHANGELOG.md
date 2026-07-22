@@ -20,7 +20,7 @@
 
 - 全部项目升级到 .NET 10，SDK 固定为 `10.0.302`。
 - Windows 版改用共享 Core，并同时维护 ISF 与 PaperInk。
-- 数据格式升级到版本 14。
+- 数据格式升级到版本 15。
 - 统一 Windows 与 Android 的笔记、备份和跨平台对象模型。
 - Android 安装包内嵌第三方声明、MAUI/Android 依赖许可与 Open Sans 字体许可。
 - 重构产品化仓库首页，新增跨平台主视觉、真实界面展示和下载入口。
@@ -42,3 +42,35 @@
 
 - 首个 Windows 本地优先版本。
 - 提供资料库、分页手写、纸张模板、页面对象、PDF 批注、搜索、备份和恢复。
+
+## Implementation status — 2026-07-22
+
+This section is the source of truth for the current offline scope.
+
+### Implemented and covered by repository tests
+
+- Cross-platform PaperInk stores pressure, tilt, smoothing, partial/stroke erasing, opacity, and layer membership.
+- Android supports rectangle lasso, multi-object selection, move, resize, rotate, duplicate, delete, group/ungroup, z-order, lock, and batch style changes.
+- Page layers support create, activate, show/hide, lock, opacity, rename, merge, and delete-with-content-migration. Hidden content remains in the document.
+- Text, image, and shape objects preserve rotation, opacity, lock, hidden, group, and layer fields across serialization.
+- Offline search indexes notebook/page titles, tags, text objects, stored OCR text, stored handwriting-recognition text, and source names.
+- Saving writes and parses a temporary document before replacing the live file. Library backup format 2 records file length and SHA-256 and verifies every entry before import.
+- Notebook format version is 15 and migration preserves legacy ISF/PaperInk and pages created before layers existed.
+- Windows thumbnails and object overlays, plus the Android renderer, honor layer visibility and effective opacity.
+
+### Scope boundaries
+
+- OCR and handwriting-recognition result fields are searchable, but the repository does not currently bundle an OCR or recognition engine.
+- Audio timeline and cue data models exist; recording capture and player UI are not yet complete.
+- Accounts, cloud sync, network AI, telemetry, advertising, and multi-user collaboration are intentionally out of scope.
+- APK, ZIP, signing keys, build output, and private notes are release artifacts or local data and are not committed.
+
+### Verification
+
+```text
+dotnet run --project tests/PaperNote.Core.Tests/PaperNote.Core.Tests.csproj -c Release
+dotnet run --project tests/SmokeTest/SmokeTest.csproj -c Release
+dotnet run --project tests/BackgroundUiTest/BackgroundUiTest.csproj -c Release
+scripts/build-android.ps1
+scripts/test-android.ps1 -SkipUi
+```

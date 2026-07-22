@@ -4,7 +4,9 @@ using System.Windows;
 using System.Windows.Ink;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
+using PaperNote.Core.Services;
 
 namespace PaperNote.Desktop.Services;
 
@@ -48,11 +50,34 @@ public static class PageThumbnailService
         if (pixelWidth is < 64 or > 5000 || pixelHeight is < 64 or > 7000)
             throw new ArgumentOutOfRangeException(nameof(pixelWidth), "页面输出尺寸超出允许范围。");
 
+        var visibleInk = new PaperInkDocument
+        {
+            Version = page.Ink.Version,
+            Strokes = page.Ink.Strokes
+                .Where(stroke => PageLayerService.IsContentVisible(page, stroke.LayerId))
+                .Select(stroke =>
+                {
+                    var clone = stroke.Clone();
+                    clone.Opacity = PageLayerService.GetEffectiveOpacity(page, clone.LayerId, clone.Opacity);
+                    return clone;
+                }).ToList()
+        };
+        var visibleObjects = page.Objects
+            .Where(item => !item.IsHidden && PageLayerService.IsContentVisible(page, item.LayerId))
+            .Select(item =>
+            {
+                var clone = item.Clone();
+                clone.Opacity = PageLayerService.GetEffectiveOpacity(page, clone.LayerId, clone.Opacity);
+                return clone;
+            }).ToArray();
+        var strokes = visibleInk.IsEmpty && !string.IsNullOrWhiteSpace(page.InkData)
+            ? WpfInkAdapter.GetPageStrokes(page)
+            : WpfInkAdapter.ToStrokeCollection(visibleInk);
         return RenderBitmap(
-            WpfInkAdapter.GetPageStrokes(page),
+            strokes,
             page.PaperTemplate,
             page.PaperColor,
-            page.Objects,
+            visibleObjects,
             PageBackgroundService.CreateImageSource(page),
             pixelWidth,
             pixelHeight);

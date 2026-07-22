@@ -1,5 +1,6 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using PaperNote.Core.Models;
+using PaperNote.Core.Services;
 using PaperNote.Mobile.Controls;
 using PaperNote.Mobile.Models;
 using PaperNote.Mobile.Services;
@@ -22,6 +23,9 @@ public sealed class EditorPage : ContentPage
     private readonly Button _widthButton;
     private readonly Button _colorButton;
     private readonly Button _fingerButton;
+    private readonly Button _opacityButton;
+    private readonly Button _eraserModeButton;
+    private readonly Button _smoothingButton;
     private readonly Dictionary<InkCanvasTool, Button> _toolButtons = [];
     private readonly Dictionary<InkCanvasTool, string> _toolLabels = [];
     private CancellationTokenSource? _saveCts;
@@ -57,16 +61,20 @@ public sealed class EditorPage : ContentPage
         _canvas = new InkCanvasView
         {
             BackgroundColor = Color.FromArgb("#E7EAF1"),
-            FingerDrawingEnabled = Preferences.Default.Get("FingerDrawing", true)
+            FingerDrawingEnabled = Preferences.Default.Get("FingerDrawing", true),
+            SmoothingEnabled = Preferences.Default.Get("InkSmoothing", true),
+            InkOpacity = Preferences.Default.Get("InkOpacity", 1d)
         };
         _canvas.InkChanged += Canvas_InkChanged;
         _canvas.HistoryChanged += (_, _) => UpdateHistory();
+        _canvas.SelectionChanged += (_, _) => UpdatePageStatus();
 
-        var toolRow = CreateToolbarRow(4);
+        var toolRow = CreateToolbarRow(5);
         AddTool(toolRow, InkCanvasTool.Pen, "钢笔", 0);
         AddTool(toolRow, InkCanvasTool.Highlighter, "荧光笔", 1);
         AddTool(toolRow, InkCanvasTool.Eraser, "橡皮擦", 2);
         AddTool(toolRow, InkCanvasTool.Pan, "平移", 3);
+        AddTool(toolRow, InkCanvasTool.Select, "选择", 4);
 
         var settingRow = CreateToolbarRow(5);
         _widthButton = CreateToolbarButton("粗细 3.2", Width_Clicked, "InkWidthButton");
@@ -76,13 +84,19 @@ public sealed class EditorPage : ContentPage
         _redo = CreateToolbarButton("重做", (_, _) => { _canvas.Redo(); UpdateHistory(); }, "RedoButton");
         settingRow.Add(_widthButton, 0); settingRow.Add(_colorButton, 1); settingRow.Add(_fingerButton, 2); settingRow.Add(_undo, 3); settingRow.Add(_redo, 4);
 
+        var advancedRow = CreateToolbarRow(3);
+        _opacityButton = CreateToolbarButton("不透明 100%", Opacity_Clicked, "InkOpacityButton");
+        _eraserModeButton = CreateToolbarButton("橡皮：局部", EraserMode_Clicked, "EraserModeButton");
+        _smoothingButton = CreateToolbarButton("平滑：开", ToggleSmoothing_Clicked, "SmoothingButton");
+        advancedRow.Add(_opacityButton, 0); advancedRow.Add(_eraserModeButton, 1); advancedRow.Add(_smoothingButton, 2);
+
         var toolbar = new VerticalStackLayout
         {
             Spacing = 5,
             Padding = new Thickness(8, 5, 8, 7),
             BackgroundColor = UiTheme.Surface,
             ZIndex = 20,
-            Children = { toolRow, settingRow }
+            Children = { toolRow, settingRow, advancedRow }
         };
         _pages = new CollectionView
         {
@@ -237,6 +251,16 @@ public sealed class EditorPage : ContentPage
         _colorButton.TextColor = Color.FromArgb(_color);
         _colorButton.BorderColor = Color.FromArgb(_color);
         UpdateFingerDrawingButton();
+        UpdateAdvancedSettingsButtons();
+    }
+
+    private void UpdateAdvancedSettingsButtons()
+    {
+        _opacityButton.Text = $"不透明 {_canvas.InkOpacity * 100:0}%";
+        _eraserModeButton.Text = _canvas.EraserMode == InkEraserMode.Partial ? "橡皮：局部" : "橡皮：整笔";
+        _smoothingButton.Text = _canvas.SmoothingEnabled ? "平滑：开" : "平滑：关";
+        _smoothingButton.BackgroundColor = _canvas.SmoothingEnabled ? UiTheme.AccentSoft : UiTheme.Surface;
+        _smoothingButton.TextColor = _canvas.SmoothingEnabled ? UiTheme.Accent : UiTheme.Text;
     }
 
     private void UpdateFingerDrawingButton()
@@ -254,7 +278,33 @@ public sealed class EditorPage : ContentPage
         if (_page is null || _repository.Current is null) return;
         var index = _repository.Current.Document.Pages.IndexOf(_page);
         if (index < 0) return;
-        _pageStatus.Text = $"{index + 1}/{_repository.Current.Document.Pages.Count} 页 · {(_canvas.FingerDrawingEnabled ? "手写开" : "手写关")}";
+        var selected = _canvas.SelectedObjectId.HasValue ? " · 已选对象" : string.Empty;
+        _pageStatus.Text = $"{index + 1}/{_repository.Current.Document.Pages.Count} 页 · {(_canvas.FingerDrawingEnabled ? "手写开" : "手写关")}{selected}";
+    }
+
+    private async void Opacity_Clicked(object? sender, EventArgs e)
+    {
+        var choice = await DisplayActionSheetAsync("笔迹不透明度", "取消", null, "100%", "75%", "50%", "25%");
+        var opacity = choice switch { "100%" => 1d, "75%" => .75d, "50%" => .5d, "25%" => .25d, _ => -1d };
+        if (opacity <= 0) return;
+        _canvas.InkOpacity = opacity;
+        Preferences.Default.Set("InkOpacity", opacity);
+        UpdateAdvancedSettingsButtons();
+    }
+
+    private async void EraserMode_Clicked(object? sender, EventArgs e)
+    {
+        var choice = await DisplayActionSheetAsync("橡皮模式", "取消", null, "局部橡皮", "整笔橡皮");
+        if (choice == "局部橡皮") _canvas.EraserMode = InkEraserMode.Partial;
+        else if (choice == "整笔橡皮") _canvas.EraserMode = InkEraserMode.Stroke;
+        UpdateAdvancedSettingsButtons();
+    }
+
+    private void ToggleSmoothing_Clicked(object? sender, EventArgs e)
+    {
+        _canvas.SmoothingEnabled = !_canvas.SmoothingEnabled;
+        Preferences.Default.Set("InkSmoothing", _canvas.SmoothingEnabled);
+        UpdateAdvancedSettingsButtons();
     }
 
     private void ToggleFingerDrawing_Clicked(object? sender, EventArgs e)
@@ -314,46 +364,137 @@ public sealed class EditorPage : ContentPage
 
     private async void More_Clicked(object? sender, EventArgs e)
     {
-        var choice = await DisplayActionSheetAsync("笔记本操作", "取消", null, "纸张设置", "适合屏幕", "清空当前页墨迹", "重命名当前页", "添加文字", "添加形状", "复制当前页", "删除当前页", "导出笔记本", "移到回收站");
         if (_page is null || _repository.Current is null) return;
+        var selected = GetSelectedObject();
+        var selectedCount = _canvas.SelectedObjectCount;
+        var selectedItems = _page.Objects.Where(item => _canvas.SelectedObjectIds.Contains(item.Id)).ToArray();
+        var actions = new List<string>();
+        if (selectedCount > 0)
+        {
+            if (selectedCount == 1 && selected?.Kind == "Text") actions.Add("\u7f16\u8f91\u9009\u4e2d\u6587\u5b57");
+            if (selectedCount > 1) actions.Add("\u7ec4\u5408\u9009\u4e2d\u5bf9\u8c61");
+            if (selectedItems.Any(item => item.GroupId is not null)) actions.Add("\u53d6\u6d88\u7ec4\u5408");
+            actions.AddRange(["\u6539\u4e3a\u5f53\u524d\u989c\u8272", "\u8bbe\u7f6e\u900f\u660e\u5ea6", "\u590d\u5236\u9009\u4e2d\u5bf9\u8c61", "\u65cb\u8f6c 90\u00b0", "\u7f6e\u4e8e\u9876\u5c42", "\u7f6e\u4e8e\u5e95\u5c42"]);
+            actions.Add(selectedItems.All(item => item.IsLocked) ? "\u89e3\u9501\u9009\u4e2d\u5bf9\u8c61" : "\u9501\u5b9a\u9009\u4e2d\u5bf9\u8c61");
+            actions.Add("\u5220\u9664\u9009\u4e2d\u5bf9\u8c61");
+        }
+        actions.AddRange(["\u56fe\u5c42", "\u7eb8\u5f20\u8bbe\u7f6e", "\u9002\u5408\u5c4f\u5e55", "\u6e05\u7a7a\u5f53\u524d\u9875\u58a8\u8ff9", "\u91cd\u547d\u540d\u5f53\u524d\u9875", "\u6dfb\u52a0\u6587\u5b57", "\u6dfb\u52a0\u5f62\u72b6", "\u590d\u5236\u5f53\u524d\u9875", "\u5220\u9664\u5f53\u524d\u9875", "\u5bfc\u51fa\u7b14\u8bb0\u672c", "\u79fb\u5230\u56de\u6536\u7ad9"]);
+
+        var choice = await DisplayActionSheetAsync("\u7b14\u8bb0\u672c\u64cd\u4f5c", "\u53d6\u6d88", null, actions.ToArray());
         switch (choice)
         {
-            case "纸张设置":
-                Template_Clicked(sender, e);
-                break;
-            case "适合屏幕":
-                _canvas.ResetViewport();
-                break;
-            case "清空当前页墨迹":
-                if (!_page.Ink.IsEmpty && await DisplayAlertAsync("清空墨迹", "确定清空当前页面的全部手写笔迹吗？页面对象不会被删除。", "清空", "取消"))
+            case "\u7f16\u8f91\u9009\u4e2d\u6587\u5b57":
+                if (selected is not null)
                 {
-                    _canvas.Clear();
-                    ScheduleSave();
+                    var text = await DisplayPromptAsync("\u7f16\u8f91\u6587\u5b57", "\u4fee\u6539\u6587\u5b57\u5185\u5bb9", initialValue: selected.Text, maxLength: 500, keyboard: Keyboard.Text);
+                    if (text is not null) _canvas.UpdateSelectedText(text.Trim());
                 }
                 break;
-            case "重命名当前页":
-                var title = await DisplayPromptAsync("页面标题", "输入页面标题", initialValue: _page.Title, maxLength: 80);
+            case "\u7ec4\u5408\u9009\u4e2d\u5bf9\u8c61": _canvas.GroupSelection(); break;
+            case "\u53d6\u6d88\u7ec4\u5408": _canvas.UngroupSelection(); break;
+            case "\u6539\u4e3a\u5f53\u524d\u989c\u8272": _canvas.UpdateSelectionStyle(_color, selected?.Opacity ?? 1); break;
+            case "\u8bbe\u7f6e\u900f\u660e\u5ea6":
+                var opacityChoice = await DisplayActionSheetAsync("\u5bf9\u8c61\u900f\u660e\u5ea6", "\u53d6\u6d88", null, "100%", "75%", "50%", "25%");
+                var opacity = opacityChoice switch { "100%" => 1d, "75%" => .75d, "50%" => .5d, "25%" => .25d, _ => -1d };
+                if (opacity > 0) _canvas.UpdateSelectionStyle(selected?.StrokeColor ?? _color, opacity);
+                break;
+            case "\u590d\u5236\u9009\u4e2d\u5bf9\u8c61": _canvas.DuplicateSelection(); break;
+            case "\u65cb\u8f6c 90\u00b0": _canvas.RotateSelection(90); break;
+            case "\u7f6e\u4e8e\u9876\u5c42": _canvas.BringSelectionToFront(); break;
+            case "\u7f6e\u4e8e\u5e95\u5c42": _canvas.SendSelectionToBack(); break;
+            case "\u9501\u5b9a\u9009\u4e2d\u5bf9\u8c61":
+            case "\u89e3\u9501\u9009\u4e2d\u5bf9\u8c61": _canvas.ToggleSelectionLock(); break;
+            case "\u5220\u9664\u9009\u4e2d\u5bf9\u8c61":
+                if (await DisplayAlertAsync("\u5220\u9664\u5bf9\u8c61", "\u786e\u5b9a\u5220\u9664\u5f53\u524d\u9009\u4e2d\u7684\u5bf9\u8c61\u5417\uff1f", "\u5220\u9664", "\u53d6\u6d88")) _canvas.DeleteSelection();
+                break;
+            case "\u56fe\u5c42": await ShowLayerMenuAsync(); break;
+            case "\u7eb8\u5f20\u8bbe\u7f6e": Template_Clicked(sender, e); break;
+            case "\u9002\u5408\u5c4f\u5e55": _canvas.ResetViewport(); break;
+            case "\u6e05\u7a7a\u5f53\u524d\u9875\u58a8\u8ff9":
+                if (!_page.Ink.IsEmpty && await DisplayAlertAsync("\u6e05\u7a7a\u58a8\u8ff9", "\u786e\u5b9a\u6e05\u7a7a\u5f53\u524d\u9875\u9762\u7684\u5168\u90e8\u624b\u5199\u7b14\u8ff9\u5417\uff1f\u9875\u9762\u5bf9\u8c61\u4e0d\u4f1a\u88ab\u5220\u9664\u3002", "\u6e05\u7a7a", "\u53d6\u6d88"))
+                { _canvas.Clear(); ScheduleSave(); }
+                break;
+            case "\u91cd\u547d\u540d\u5f53\u524d\u9875":
+                var title = await DisplayPromptAsync("\u9875\u9762\u6807\u9898", "\u8f93\u5165\u9875\u9762\u6807\u9898", initialValue: _page.Title, maxLength: 80);
                 if (title is not null) { _page.Title = title.Trim(); RefreshPageCards(); ScheduleSave(); }
                 break;
-            case "添加文字":
-                var text = await DisplayPromptAsync("添加文字", "输入文字内容", maxLength: 500, keyboard: Keyboard.Text);
-                if (!string.IsNullOrWhiteSpace(text)) { _page.Objects.Add(new PageObject { Kind = "Text", Text = text.Trim() }); ScheduleSave(); _canvas.Page = null; _canvas.Page = _page; }
+            case "\u6dfb\u52a0\u6587\u5b57":
+                var addedText = await DisplayPromptAsync("\u6dfb\u52a0\u6587\u5b57", "\u8f93\u5165\u6587\u5b57\u5185\u5bb9", maxLength: 500, keyboard: Keyboard.Text);
+                if (!string.IsNullOrWhiteSpace(addedText))
+                {
+                    var item = new PageObject { Kind = "Text", Text = addedText.Trim(), StrokeColor = _color, LayerId = PageLayerService.EnsureDefault(_page).Id };
+                    _page.Objects.Add(item); _page.ModifiedAt = DateTimeOffset.Now;
+                    _canvas.Page = null; _canvas.Page = _page; SelectTool(InkCanvasTool.Select); _canvas.SelectObject(item.Id); ScheduleSave();
+                }
                 break;
-            case "添加形状":
-                await AddShapeAsync();
-                break;
-            case "复制当前页":
-                LoadPage(_repository.DuplicatePage(_page.Id)); RefreshPageCards(); ScheduleSave(); break;
-            case "删除当前页":
-                if (await DisplayAlertAsync("删除页面", "确定删除当前页面吗？", "删除", "取消") && _repository.DeletePage(_page.Id))
+            case "\u6dfb\u52a0\u5f62\u72b6": await AddShapeAsync(); break;
+            case "\u590d\u5236\u5f53\u524d\u9875": LoadPage(_repository.DuplicatePage(_page.Id)); RefreshPageCards(); ScheduleSave(); break;
+            case "\u5220\u9664\u5f53\u524d\u9875":
+                if (await DisplayAlertAsync("\u5220\u9664\u9875\u9762", "\u786e\u5b9a\u5220\u9664\u5f53\u524d\u9875\u9762\u5417\uff1f", "\u5220\u9664", "\u53d6\u6d88") && _repository.DeletePage(_page.Id))
                 { RefreshPageCards(); LoadPage(_repository.GetCurrentPage()); ScheduleSave(); }
                 break;
-            case "导出笔记本": await _transfer.ShareNotebookAsync(); break;
-            case "移到回收站":
-                if (await DisplayAlertAsync("移到回收站", "笔记本可通过桌面版或备份恢复。", "移除", "取消"))
+            case "\u5bfc\u51fa\u7b14\u8bb0\u672c": await _transfer.ShareNotebookAsync(); break;
+            case "\u79fb\u5230\u56de\u6536\u7ad9":
+                if (await DisplayAlertAsync("\u79fb\u5230\u56de\u6536\u7ad9", "\u7b14\u8bb0\u672c\u53ef\u901a\u8fc7\u684c\u9762\u7248\u6216\u5907\u4efd\u6062\u590d\u3002", "\u79fb\u9664", "\u53d6\u6d88"))
                 { await _repository.MoveCurrentToTrashAsync(); await Navigation.PopAsync(); }
                 break;
         }
+    }
+
+    private async Task ShowLayerMenuAsync()
+    {
+        if (_page is null) return;
+        var active = PageLayerService.EnsureDefault(_page);
+        var action = await DisplayActionSheetAsync($"图层 · {active.Name}", "取消", null,
+            "切换活动图层", "新建图层", "重命名当前图层", active.IsVisible ? "隐藏当前图层" : "显示当前图层",
+            active.IsLocked ? "解锁当前图层" : "锁定当前图层", "设置图层透明度", "合并到其他图层", "删除当前图层");
+        switch (action)
+        {
+            case "切换活动图层":
+                var layerLabels = _page.Layers.Select((layer, i) => $"{i + 1}. {layer.Name}{(layer.Id == _page.ActiveLayerId ? " ✓" : string.Empty)}").ToArray();
+                var layerChoice = await DisplayActionSheetAsync("选择活动图层", "取消", null, layerLabels);
+                var layerIndex = Array.IndexOf(layerLabels, layerChoice);
+                if (layerIndex >= 0) PageLayerService.SetActive(_page, _page.Layers[layerIndex].Id);
+                break;
+            case "新建图层":
+                var newName = await DisplayPromptAsync("新建图层", "图层名称", initialValue: $"图层 {_page.Layers.Count + 1}", maxLength: 40);
+                if (!string.IsNullOrWhiteSpace(newName)) PageLayerService.Add(_page, newName.Trim());
+                break;
+            case "重命名当前图层":
+                var renamed = await DisplayPromptAsync("重命名图层", "图层名称", initialValue: active.Name, maxLength: 40);
+                if (!string.IsNullOrWhiteSpace(renamed)) PageLayerService.Rename(_page, active.Id, renamed);
+                break;
+            case "隐藏当前图层":
+            case "显示当前图层": PageLayerService.SetVisibility(_page, active.Id, !active.IsVisible); break;
+            case "锁定当前图层":
+            case "解锁当前图层": PageLayerService.SetLocked(_page, active.Id, !active.IsLocked); break;
+            case "设置图层透明度":
+                var opacityChoice = await DisplayActionSheetAsync("图层透明度", "取消", null, "100%", "75%", "50%", "25%");
+                var opacity = opacityChoice switch { "100%" => 1d, "75%" => .75d, "50%" => .5d, "25%" => .25d, _ => -1d };
+                if (opacity > 0) PageLayerService.SetOpacity(_page, active.Id, opacity);
+                break;
+            case "合并到其他图层":
+            case "删除当前图层":
+                var targets = _page.Layers.Where(layer => layer.Id != active.Id).ToArray();
+                if (targets.Length == 0) { await DisplayAlertAsync("无法操作", "页面至少需要保留一个图层。", "知道了"); break; }
+                var targetLabels = targets.Select(layer => layer.Name).ToArray();
+                var targetChoice = await DisplayActionSheetAsync("选择目标图层", "取消", null, targetLabels);
+                var target = targets.FirstOrDefault(layer => layer.Name == targetChoice);
+                if (target is not null)
+                {
+                    if (action == "合并到其他图层") PageLayerService.MergeInto(_page, active.Id, target.Id);
+                    else if (await DisplayAlertAsync("删除图层", "内容将移到目标图层。", "删除", "取消")) PageLayerService.Delete(_page, active.Id, target.Id);
+                }
+                break;
+        }
+        _canvas.Page = null; _canvas.Page = _page;
+        UpdatePageStatus(); ScheduleSave();
+    }
+
+    private PageObject? GetSelectedObject()
+    {
+        if (_page is null || _canvas.SelectedObjectId is not Guid selectedId) return null;
+        return _page.Objects.FirstOrDefault(item => item.Id == selectedId);
     }
 
     private async Task AddShapeAsync()
@@ -383,12 +524,15 @@ public sealed class EditorPage : ContentPage
             Width = shapeKind == "Line" ? 360 : 300,
             Height = shapeKind == "Line" ? 80 : 180,
             StrokeColor = _color,
-            FillColor = shapeKind is "Line" or "Arrow" ? "#00000000" : "#183978F6"
+            FillColor = shapeKind is "Line" or "Arrow" ? "#00000000" : "#183978F6",
+            LayerId = PageLayerService.EnsureDefault(_page).Id
         };
         _page.Objects.Add(shape);
         _page.ModifiedAt = DateTimeOffset.Now;
         _canvas.Page = null;
         _canvas.Page = _page;
+        SelectTool(InkCanvasTool.Select);
+        _canvas.SelectObject(shape.Id);
         ScheduleSave();
     }
 

@@ -5,12 +5,20 @@ using PaperNote.Core.Models;
 
 namespace PaperNote.Core.Services;
 
+public sealed class LibraryBackupFileManifest
+{
+    public string Path { get; set; } = string.Empty;
+    public long Length { get; set; }
+    public string Sha256 { get; set; } = string.Empty;
+}
+
 public sealed class LibraryBackupManifest
 {
-    public int FormatVersion { get; set; } = 1;
+    public int FormatVersion { get; set; } = 2;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
     public int NotebookCount { get; set; }
     public int BackupCount { get; set; }
+    public List<LibraryBackupFileManifest> Files { get; set; } = [];
 }
 
 public sealed class LibraryImportResult
@@ -34,6 +42,13 @@ public sealed class LibraryBackupPackageService
         var notebookFiles = Directory.Exists(notebooksDirectory) ? Directory.EnumerateFiles(notebooksDirectory, "*.papernote", SearchOption.TopDirectoryOnly).ToArray() : [];
         var backupFiles = Directory.Exists(backupsDirectory) ? Directory.EnumerateFiles(backupsDirectory, "*.papernote", SearchOption.AllDirectories).ToArray() : [];
         var manifest = new LibraryBackupManifest { NotebookCount = notebookFiles.Length, BackupCount = backupFiles.Length };
+        foreach (var file in notebookFiles)
+            manifest.Files.Add(new LibraryBackupFileManifest { Path = $"notebooks/{Path.GetFileName(file)}", Length = new FileInfo(file).Length, Sha256 = await DocumentIntegrityService.ComputeFileSha256Async(file, cancellationToken) });
+        foreach (var file in backupFiles)
+        {
+            var relative = Path.GetRelativePath(backupsDirectory, file).Replace('\\', '/');
+            manifest.Files.Add(new LibraryBackupFileManifest { Path = $"backups/{relative}", Length = new FileInfo(file).Length, Sha256 = await DocumentIntegrityService.ComputeFileSha256Async(file, cancellationToken) });
+        }
         var temporaryPath = packagePath + ".tmp";
         try
         {
@@ -77,6 +92,15 @@ public sealed class LibraryBackupPackageService
         Directory.CreateDirectory(backupsDirectory);
 
         using var archive = ZipFile.OpenRead(packagePath);
+        LibraryBackupManifest? manifest = null;
+        var manifestEntry = archive.GetEntry("manifest.json");
+        if (manifestEntry is not null)
+        {
+            await using var manifestStream = manifestEntry.Open();
+            manifest = await JsonSerializer.DeserializeAsync<LibraryBackupManifest>(manifestStream, _jsonOptions, cancellationToken);
+        }
+        var expectedFiles = (manifest?.Files ?? []).Where(item => !string.IsNullOrWhiteSpace(item.Path))
+            .ToDictionary(item => item.Path.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
         var notebookEntries = archive.Entries.Where(entry => entry.FullName.StartsWith("notebooks/", StringComparison.OrdinalIgnoreCase) && entry.FullName.EndsWith(".papernote", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(entry.Name)).ToArray();
         if (notebookEntries.Length == 0) throw new InvalidDataException("备份包中没有可恢复的笔记本。");
 
@@ -85,6 +109,7 @@ public sealed class LibraryBackupPackageService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var bytes = await ReadEntryBytesAsync(entry, cancellationToken);
+            VerifyEntryIntegrity(entry.FullName, bytes, expectedFiles);
             ValidateNotebookBytes(bytes, $"备份包中的 {entry.Name}");
             validated.Add((entry, bytes));
         }
@@ -97,6 +122,7 @@ public sealed class LibraryBackupPackageService
             var parts = relative.Split('/', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length != 2) continue;
             var bytes = await ReadEntryBytesAsync(entry, cancellationToken);
+            VerifyEntryIntegrity(entry.FullName, bytes, expectedFiles);
             ValidateNotebookBytes(bytes, $"历史版本 {entry.Name}");
             validatedBackups.Add((parts[0], Path.GetFileName(parts[1]), bytes));
         }
@@ -144,6 +170,16 @@ public sealed class LibraryBackupPackageService
         }
 
         return new LibraryImportResult { ImportedNotebooks = imported, SkippedNotebooks = skipped, ImportedBackups = importedBackups };
+    }
+
+    private static void VerifyEntryIntegrity(string path, byte[] bytes, IReadOnlyDictionary<string, LibraryBackupFileManifest> expectedFiles)
+    {
+        if (expectedFiles.Count == 0) return;
+        var normalized = path.Replace('\\', '/');
+        if (!expectedFiles.TryGetValue(normalized, out var expected))
+            throw new InvalidDataException($"\u5907\u4efd\u5305\u6e05\u5355\u7f3a\u5c11\u6587\u4ef6\uff1a{normalized}");
+        if (expected.Length != bytes.LongLength || !DocumentIntegrityService.Verify(bytes, expected.Sha256))
+            throw new InvalidDataException($"\u5907\u4efd\u5305\u6587\u4ef6\u6821\u9a8c\u5931\u8d25\uff1a{normalized}");
     }
 
     private void ValidateNotebookBytes(byte[] bytes, string label)

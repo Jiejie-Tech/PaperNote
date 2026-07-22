@@ -2,7 +2,7 @@
 
 ## 概览
 
-PaperNote 使用 `.papernote` 保存单个笔记本。当前 `FormatVersion` 为 **14**。Windows 与 Android 共用领域模型、页面对象、备份和 PaperInk 墨迹格式。
+PaperNote 使用 `.papernote` 保存单个笔记本。当前 `FormatVersion` 为 **15**。Windows 与 Android 共用领域模型、页面对象、备份和 PaperInk 墨迹格式。
 
 ## 主要结构
 

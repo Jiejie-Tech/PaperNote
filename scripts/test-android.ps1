@@ -4,6 +4,29 @@ $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'android-common.ps1')
 $environment=Get-PaperNoteAndroidEnvironment
+$sourceAssertions=@(
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='AddTool(toolRow, InkCanvasTool.Select';Label='select tool'},
+  @{Path='src\PaperNote.Mobile\Controls\InkCanvasView.cs';Pattern='SelectedObjectId';Label='selected object state'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='EraserModeButton';Label='eraser mode control'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='InkOpacityButton';Label='opacity control'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='DrawSelection';Label='selection adorners'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='CanvasSnapshot';Label='unified history snapshot'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='InkEditingService.ErasePartial';Label='partial eraser'},
+  @{Path='src\PaperNote.Core\Services\PageObjectEditingService.cs';Pattern='Duplicate';Label='shared object editing'},
+  @{Path='src\PaperNote.Core\Services\InkEditingService.cs';Pattern='SmoothStroke';Label='stroke smoothing'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='_lassoSelecting';Label='rectangle lasso'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='_selectedObjectIds';Label='multi object selection'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='GroupSelection';Label='object grouping'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='UngroupSelection';Label='object ungrouping'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\AndroidPageRenderer.cs';Pattern='IsContentVisible';Label='layer visibility rendering'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\AndroidPageRenderer.cs';Pattern='GetEffectiveOpacity';Label='layer opacity rendering'}
+)
+foreach($assertion in $sourceAssertions){
+  $path=Join-Path $environment.RepoRoot $assertion.Path
+  if(-not(Test-Path -LiteralPath $path)){throw "Android source assertion file missing: $($assertion.Path)"}
+  if(-not(Select-String -LiteralPath $path -SimpleMatch $assertion.Pattern -Quiet)){throw "Android source assertion failed: $($assertion.Label)"}
+}
+Write-Host 'ANDROID SOURCE STATIC CHECK PASS'
 if(-not $SkipBuild){ & (Join-Path $PSScriptRoot 'build-android.ps1') }
 function U([int[]]$c){-join($c|ForEach-Object{[char]$_})}
 $uiNew="$(U @(0xFF0B)) $(U @(0x65B0,0x5EFA))";$uiConfirm='OK';$uiPen=U @(0x94A2,0x7B14);$uiEraser=U @(0x6A61,0x76AE,0x64E6);$uiSelected=" $([char]0x2713)"

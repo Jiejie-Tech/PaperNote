@@ -1371,7 +1371,7 @@ Debug 与 Release 的存储冒烟测试、隐藏 WPF 测试和编译均通过，
 
 ### 32.3 数据和发布
 
-- 数据格式升级到 `FormatVersion = 14`。
+- 数据格式升级到 `FormatVersion = 15`。
 - Android 资料库位于应用私有目录；卸载前必须通过应用导出笔记或整库备份。
 - 发布脚本在仓库外保存签名密钥和受 DPAPI 保护的密码，并生成签名 APK、APK SHA-256、构建元数据，以及包含安装指南和许可文件的 Android 分发 ZIP 与 ZIP SHA-256。
 - Android 清单不申请 INTERNET 权限，不启用系统自动备份。

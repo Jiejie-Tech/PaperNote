@@ -74,7 +74,7 @@ public sealed class NotebookStorageService
     {
         EnsurePathIsInNotebookDirectory(filePath, allowMissing: true);
         NormalizeDocument(document);
-        document.FormatVersion = Math.Max(document.FormatVersion, 14);
+        document.FormatVersion = Math.Max(document.FormatVersion, 15);
         document.ModifiedAt = DateTimeOffset.Now;
         var bytes = JsonSerializer.SerializeToUtf8Bytes(document, _jsonOptions);
         var directory = Path.GetDirectoryName(filePath)
@@ -86,6 +86,11 @@ public sealed class NotebookStorageService
         try
         {
             await File.WriteAllBytesAsync(temporaryPath, bytes, cancellationToken);
+            var persisted = await File.ReadAllBytesAsync(temporaryPath, cancellationToken);
+            var verified = JsonSerializer.Deserialize<NotebookDocument>(persisted, _jsonOptions)
+                ?? throw new InvalidDataException("\u4e34\u65f6\u4fdd\u5b58\u6587\u4ef6\u9a8c\u8bc1\u5931\u8d25\uff1a\u5185\u5bb9\u4e3a\u7a7a\u3002");
+            if (verified.Id != document.Id || verified.Pages is null)
+                throw new InvalidDataException("\u4e34\u65f6\u4fdd\u5b58\u6587\u4ef6\u9a8c\u8bc1\u5931\u8d25\uff1a\u6587\u6863\u6807\u8bc6\u6216\u9875\u9762\u6570\u636e\u4e0d\u5b8c\u6574\u3002");
             File.Move(temporaryPath, filePath, overwrite: true);
         }
         finally
@@ -157,6 +162,7 @@ public sealed class NotebookStorageService
         document.Title = string.IsNullOrWhiteSpace(document.Title) ? "未命名笔记本" : document.Title.Trim();
         document.FolderName = NormalizeFolderName(document.FolderName);
         document.CoverStyle = NormalizeCoverStyle(document.CoverStyle);
+        document.Tags = NormalizeTags(document.Tags);
         if (!document.IsInTrash) document.TrashedAt = null;
         if (document.LastOpenedAt is { } openedAt && openedAt < document.CreatedAt) document.LastOpenedAt = document.CreatedAt;
 
@@ -192,6 +198,21 @@ public sealed class NotebookStorageService
             page.BackgroundCropTop = NormalizeCrop(page.BackgroundCropTop);
             page.BackgroundCropRight = NormalizeCrop(page.BackgroundCropRight);
             page.BackgroundCropBottom = NormalizeCrop(page.BackgroundCropBottom);
+            page.Tags = NormalizeTags(page.Tags);
+            page.OcrText ??= string.Empty;
+            page.RecognizedText ??= string.Empty;
+            page.Layers ??= [];
+            page.Layers = page.Layers.Where(layer => layer is not null).Select(layer => new PageLayer
+            {
+                Id = layer.Id == Guid.Empty ? Guid.NewGuid() : layer.Id,
+                Name = string.IsNullOrWhiteSpace(layer.Name) ? "图层" : layer.Name.Trim()[..Math.Min(layer.Name.Trim().Length, 40)],
+                IsVisible = layer.IsVisible, IsLocked = layer.IsLocked,
+                Opacity = double.IsFinite(layer.Opacity) ? Math.Clamp(layer.Opacity, .1, 1) : 1
+            }).ToList();
+            page.AudioRecordings ??= [];
+            page.AudioRecordings = page.AudioRecordings.Where(recording => recording is not null).ToList();
+            if (page.Layers.Count == 0) page.Layers.Add(new PageLayer());
+            page.ActiveLayerId = page.Layers.Any(layer => layer.Id == page.ActiveLayerId) ? page.ActiveLayerId : page.Layers[0].Id;
             (page.BackgroundCropLeft, page.BackgroundCropRight) = NormalizeCropPair(page.BackgroundCropLeft, page.BackgroundCropRight);
             (page.BackgroundCropTop, page.BackgroundCropBottom) = NormalizeCropPair(page.BackgroundCropTop, page.BackgroundCropBottom);
             if (string.IsNullOrWhiteSpace(page.BackgroundImageData))
@@ -203,6 +224,7 @@ public sealed class NotebookStorageService
             foreach (var pageObject in page.Objects)
             {
                 NormalizePageObject(pageObject);
+                if (pageObject.LayerId is Guid layerId && page.Layers.All(layer => layer.Id != layerId)) pageObject.LayerId = page.ActiveLayerId;
             }
 
             var validGroups = page.Objects
@@ -249,6 +271,13 @@ public sealed class NotebookStorageService
         }
 
         if (!allowMissing && !File.Exists(fullPath)) throw new FileNotFoundException("找不到笔记本文件。", fullPath);
+    }
+
+    private static List<string> NormalizeTags(IEnumerable<string>? tags)
+    {
+        return (tags ?? []).Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(tag => tag.Trim()).Where(tag => tag.Length <= 30)
+            .Distinct(StringComparer.CurrentCultureIgnoreCase).Take(30).ToList();
     }
 
     public static string NormalizePageTitle(string? title)

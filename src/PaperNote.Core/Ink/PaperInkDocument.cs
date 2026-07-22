@@ -42,6 +42,7 @@ public sealed class PaperInkStroke
     public double Width { get; set; } = PaperInkDefaults.PenWidth;
     public double Opacity { get; set; } = 1;
     public bool PressureEnabled { get; set; } = true;
+    public Guid? LayerId { get; set; }
     public List<PaperInkPoint> Points { get; set; } = [];
 
     public PaperInkStroke Clone()
@@ -54,6 +55,7 @@ public sealed class PaperInkStroke
             Width = Width,
             Opacity = Opacity,
             PressureEnabled = PressureEnabled,
+            LayerId = LayerId,
             Points = Points.Select(point => point.Clone()).ToList()
         };
     }

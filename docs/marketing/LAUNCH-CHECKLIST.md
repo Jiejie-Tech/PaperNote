@@ -39,3 +39,35 @@
 - [ ] 安装公开 APK 做一次新建、书写、关闭和重启测试
 - [ ] 收集设备型号、Android 版本和触控笔兼容性反馈
 - [ ] 为已确认问题建立 Issue 并更新已知限制
+
+## Implementation status — 2026-07-22
+
+This section is the source of truth for the current offline scope.
+
+### Implemented and covered by repository tests
+
+- Cross-platform PaperInk stores pressure, tilt, smoothing, partial/stroke erasing, opacity, and layer membership.
+- Android supports rectangle lasso, multi-object selection, move, resize, rotate, duplicate, delete, group/ungroup, z-order, lock, and batch style changes.
+- Page layers support create, activate, show/hide, lock, opacity, rename, merge, and delete-with-content-migration. Hidden content remains in the document.
+- Text, image, and shape objects preserve rotation, opacity, lock, hidden, group, and layer fields across serialization.
+- Offline search indexes notebook/page titles, tags, text objects, stored OCR text, stored handwriting-recognition text, and source names.
+- Saving writes and parses a temporary document before replacing the live file. Library backup format 2 records file length and SHA-256 and verifies every entry before import.
+- Notebook format version is 15 and migration preserves legacy ISF/PaperInk and pages created before layers existed.
+- Windows thumbnails and object overlays, plus the Android renderer, honor layer visibility and effective opacity.
+
+### Scope boundaries
+
+- OCR and handwriting-recognition result fields are searchable, but the repository does not currently bundle an OCR or recognition engine.
+- Audio timeline and cue data models exist; recording capture and player UI are not yet complete.
+- Accounts, cloud sync, network AI, telemetry, advertising, and multi-user collaboration are intentionally out of scope.
+- APK, ZIP, signing keys, build output, and private notes are release artifacts or local data and are not committed.
+
+### Verification
+
+```text
+dotnet run --project tests/PaperNote.Core.Tests/PaperNote.Core.Tests.csproj -c Release
+dotnet run --project tests/SmokeTest/SmokeTest.csproj -c Release
+dotnet run --project tests/BackgroundUiTest/BackgroundUiTest.csproj -c Release
+scripts/build-android.ps1
+scripts/test-android.ps1 -SkipUi
+```

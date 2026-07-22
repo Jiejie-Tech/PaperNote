@@ -8,6 +8,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Microsoft.Win32;
 using PaperNote.Core.Models;
+using PaperNote.Core.Services;
 
 namespace PaperNote.Desktop;
 
@@ -211,7 +212,7 @@ public partial class MainWindow
         ClearPageObjectSelection();
         _pageObjectContainers.Clear();
         ObjectLayer.Children.Clear();
-        foreach (var pageObject in page.Objects)
+        foreach (var pageObject in page.Objects.Where(item => !item.IsHidden && PageLayerService.IsContentVisible(page, item.LayerId)))
         {
             var container = CreatePageObjectContainer(pageObject);
             _pageObjectContainers[pageObject.Id] = container;
@@ -246,7 +247,7 @@ public partial class MainWindow
             Background = pageObject.Kind == "Text" ? new SolidColorBrush(Color.FromArgb(12, 57, 120, 246)) : Brushes.Transparent,
             CornerRadius = new CornerRadius(3),
             ClipToBounds = true,
-            Opacity = Math.Clamp(pageObject.Opacity, 0.1, 1),
+            Opacity = PageLayerService.GetEffectiveOpacity(_currentPage, pageObject.LayerId, pageObject.Opacity),
             RenderTransformOrigin = new Point(0.5, 0.5),
             RenderTransform = new RotateTransform(pageObject.Rotation),
             Child = CreatePageObjectContent(pageObject)
@@ -263,7 +264,7 @@ public partial class MainWindow
             Cursor = pageObject.IsLocked ? Cursors.Arrow : Cursors.SizeAll,
             CornerRadius = new CornerRadius(4, 4, 0, 0),
             ToolTip = pageObject.IsLocked ? "对象已锁定；仍可选择并解锁" : "拖动对象；按住 Ctrl 点击可多选",
-            IsHitTestVisible = !pageObject.IsLocked
+            IsHitTestVisible = !pageObject.IsLocked && !PageLayerService.IsContentLocked(_currentPage, pageObject.LayerId)
         };
         dragHandle.Child = new Border
         {

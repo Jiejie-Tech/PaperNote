@@ -16,7 +16,7 @@ public static class NotebookDefaults
 
 public sealed class NotebookDocument
 {
-    public int FormatVersion { get; set; } = 14;
+    public int FormatVersion { get; set; } = 15;
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = "未命名笔记本";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
@@ -25,6 +25,9 @@ public sealed class NotebookDocument
     public Guid CurrentPageId { get; set; }
     public string FolderName { get; set; } = NotebookDefaults.FolderName;
     public string CoverStyle { get; set; } = NotebookDefaults.CoverStyle;
+    public bool IsPinned { get; set; }
+    public bool IsFavorite { get; set; }
+    public List<string> Tags { get; set; } = [];
     public bool IsInTrash { get; set; }
     public DateTimeOffset? TrashedAt { get; set; }
     public List<NotebookPage> Pages { get; set; } = [];
@@ -69,6 +72,12 @@ public sealed class NotebookPage
     public double BackgroundCropRight { get; set; }
     public double BackgroundCropBottom { get; set; }
     public List<PageObject> Objects { get; set; } = [];
+    public List<string> Tags { get; set; } = [];
+    public string OcrText { get; set; } = string.Empty;
+    public string RecognizedText { get; set; } = string.Empty;
+    public List<PageLayer> Layers { get; set; } = [];
+    public Guid? ActiveLayerId { get; set; }
+    public List<AudioRecording> AudioRecordings { get; set; } = [];
 
     public NotebookPage Clone(bool preserveIdentity = false)
     {
@@ -93,7 +102,10 @@ public sealed class NotebookPage
             BackgroundCropTop = BackgroundCropTop,
             BackgroundCropRight = BackgroundCropRight,
             BackgroundCropBottom = BackgroundCropBottom,
-            Objects = Objects.Select(item => item.Clone()).ToList()
+            Objects = Objects.Select(item => item.Clone()).ToList(),
+            Tags = Tags.ToList(), OcrText = OcrText, RecognizedText = RecognizedText,
+            Layers = Layers.Select(layer => layer.Clone()).ToList(), ActiveLayerId = ActiveLayerId,
+            AudioRecordings = AudioRecordings.Select(recording => recording.Clone()).ToList()
         };
     }
 }
@@ -141,6 +153,8 @@ public sealed class PageObject
     public bool IsLocked { get; set; }
     public Guid? GroupId { get; set; }
     public Guid? LinkTargetPageId { get; set; }
+    public Guid? LayerId { get; set; }
+    public bool IsHidden { get; set; }
 
     public PageObject Clone()
     {
@@ -162,7 +176,9 @@ public sealed class PageObject
             Rotation = Rotation,
             IsLocked = IsLocked,
             GroupId = GroupId,
-            LinkTargetPageId = LinkTargetPageId
+            LinkTargetPageId = LinkTargetPageId,
+            LayerId = LayerId,
+            IsHidden = IsHidden
         };
     }
 }
