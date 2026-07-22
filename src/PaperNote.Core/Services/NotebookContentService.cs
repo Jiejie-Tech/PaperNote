@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using PaperNote.Core.Models;
 
 namespace PaperNote.Core.Services;
@@ -29,6 +29,9 @@ public static class NotebookContentService
         if (page.Tags.Count > 0) builder.AppendLine($"\u6807\u7b7e\uff1a{string.Join("\u3001", page.Tags)}");
         if (!string.IsNullOrWhiteSpace(page.OcrText)) builder.AppendLine(page.OcrText.Trim());
         if (!string.IsNullOrWhiteSpace(page.RecognizedText)) builder.AppendLine(page.RecognizedText.Trim());
+        if (!string.IsNullOrWhiteSpace(page.PdfText)) builder.AppendLine(page.PdfText.Trim());
+        foreach (var comment in page.Comments.Where(comment => !string.IsNullOrWhiteSpace(comment.Text)))
+            builder.AppendLine($"[\u6279\u6ce8] {comment.Text.Trim()}");
 
         var textObjects = page.Objects.Where(item => item.Kind == "Text" && !item.IsHidden && !string.IsNullOrWhiteSpace(item.Text)).ToArray();
         foreach (var item in textObjects) builder.AppendLine(item.Text.Trim());
@@ -92,6 +95,9 @@ public static class NotebookContentService
             foreach (var tag in page.Tags) yield return ($"\u7b2c {index + 1} \u9875\u6807\u7b7e", tag);
             if (!string.IsNullOrWhiteSpace(page.OcrText)) yield return ($"\u7b2c {index + 1} \u9875 OCR", page.OcrText);
             if (!string.IsNullOrWhiteSpace(page.RecognizedText)) yield return ($"\u7b2c {index + 1} \u9875\u624b\u5199\u8bc6\u522b", page.RecognizedText);
+            if (!string.IsNullOrWhiteSpace(page.PdfText)) yield return ($"\u7b2c {index + 1} \u9875 PDF \u6587\u672c", page.PdfText);
+            foreach (var comment in page.Comments.Where(comment => !string.IsNullOrWhiteSpace(comment.Text)))
+                yield return ($"\u7b2c {index + 1} \u9875\u6279\u6ce8", comment.Text);
             foreach (var item in page.Objects.Where(item => item.Kind == "Text" && !item.IsHidden && !string.IsNullOrWhiteSpace(item.Text)))
                 yield return ($"\u7b2c {index + 1} \u9875\u6587\u5b57", item.Text);
             if (!string.IsNullOrWhiteSpace(page.BackgroundSourceName))

@@ -8,7 +8,7 @@ using PaperNote.Mobile.Services;
 
 namespace PaperNote.Mobile.Pages;
 
-public sealed class EditorPage : ContentPage
+public sealed partial class EditorPage : ContentPage
 {
     private readonly MobileNotebookRepository _repository;
     private readonly MobileTransferService _transfer;
@@ -155,7 +155,9 @@ public sealed class EditorPage : ContentPage
         var bottomButtons = new HorizontalStackLayout { Spacing = 7 };
         bottomButtons.Add(UiTheme.Button("页面", Pages_Clicked));
         bottomButtons.Add(UiTheme.Button("＋ 新页", AddPage_Clicked, primary: true));
-        bottomButtons.Add(UiTheme.Button("PDF", Pdf_Clicked));
+        var pdfButton = UiTheme.Button("PDF", Pdf_Clicked);
+        pdfButton.AutomationId = "PdfStudyMenuButton";
+        bottomButtons.Add(pdfButton);
         _audioButton = UiTheme.Button("录音", Audio_Clicked);
         _audioButton.AutomationId = "AudioTimelineButton";
         bottomButtons.Add(_audioButton);
@@ -1080,10 +1082,17 @@ public sealed class EditorPage : ContentPage
     private async void Pdf_Clicked(object? sender, EventArgs e)
     {
         if (_repository.Current is null || _pdfImportCts is not null) return;
-        var choice = await DisplayActionSheetAsync("PDF", "取消", null, "导入 PDF 页面", "导出全部页面为 PDF", "仅导出当前页");
+        var choice = await DisplayActionSheetAsync("PDF 学习与页面管理", "取消", null, "搜索 PDF 文本", "书签与大纲", "当前页内部链接", "批注列表", "页面批量管理", "按页码范围导出 PDF", "按页码范围提取为笔记本", "导入 PDF 页面", "导出全部页面为 PDF", "仅导出当前页");
         try
         {
-            if (choice == "导入 PDF 页面")
+            if (choice == "搜索 PDF 文本") await PdfStudySearchAsync();
+            else if (choice == "书签与大纲") await PdfBookmarksAndOutlineAsync();
+            else if (choice == "当前页内部链接") await PdfInternalLinksAsync();
+            else if (choice == "批注列表") await PdfAnnotationsAsync();
+            else if (choice == "页面批量管理") await PdfPageBatchAsync();
+            else if (choice == "按页码范围导出 PDF") await PdfPageBatchAsync("导出所选页面为 PDF");
+            else if (choice == "按页码范围提取为笔记本") await PdfPageBatchAsync("提取为新笔记本");
+            else if (choice == "导入 PDF 页面")
             {
                 var file = await _transfer.PickPdfAsync();
                 if (file is null) return;
@@ -1109,19 +1118,22 @@ public sealed class EditorPage : ContentPage
                 if (range is null) return;
                 var pageNumbers = PdfPageRangeService.Parse(range, prepared.PageCount);
                 ShowPdfImportProgress($"准备导入 {pageNumbers.Count} 页…", 0);
-                var imported = await _pdf.ImportAsync(prepared, pageNumbers, progress, token);
+                var importedDocument = await _pdf.ImportDocumentAsync(prepared, pageNumbers, progress, token);
                 var notebook = _repository.Current.Document;
                 var index = notebook.Pages.FindIndex(page => page.Id == notebook.CurrentPageId) + 1;
-                var pages = imported.Select(item => item.Page).ToArray();
+                var pages = importedDocument.Pages.Select(item => item.Page).ToArray();
                 notebook.Pages.InsertRange(index, pages);
+                PdfDocumentContentService.AttachToImportedPages(notebook, pages, importedDocument.Content, importedDocument.SourceFingerprint);
                 notebook.CurrentPageId = pages[0].Id;
                 RefreshPageCards();
                 LoadPage(pages[0]);
                 await _repository.SaveCurrentAsync(token);
-                var restored = imported.Count(item => item.FromCache);
+                var restored = importedDocument.Pages.Count(item => item.FromCache);
+                var searchable = pages.Count(page => !string.IsNullOrWhiteSpace(page.PdfText));
+                var warningSuffix = importedDocument.Content.Warnings.Count > 0 ? $" · {importedDocument.Content.Warnings.Count} 项文本层提示" : string.Empty;
                 _pageStatus.Text = restored > 0
-                    ? $"已导入 {pages.Length} 页 · 从缓存续接 {restored} 页"
-                    : $"已导入 {pages.Length} 页 PDF";
+                    ? $"已导入 {pages.Length} 页 · 从缓存续接 {restored} 页 · {searchable} 页可搜索{warningSuffix}"
+                    : $"已导入 {pages.Length} 页 PDF · {searchable} 页可搜索{warningSuffix}";
             }
             else if (choice == "导出全部页面为 PDF") await _pdf.ExportAndShareAsync(_repository.Current.Document);
             else if (choice == "仅导出当前页" && _page is not null) await _pdf.ExportAndShareAsync(_repository.Current.Document, [_page]);

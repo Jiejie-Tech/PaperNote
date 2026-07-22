@@ -7,6 +7,12 @@ namespace PaperNote.Desktop.Services;
 
 public sealed record ImportedPdfPage(int PageNumber, string ImageData, bool FromCache = false);
 
+public sealed record ImportedPdfDocument(
+    string SourceName,
+    string SourceFingerprint,
+    IReadOnlyList<ImportedPdfPage> Pages,
+    PdfDocumentContent Content);
+
 public static class PdfImportService
 {
     public const long MaximumFileSizeBytes = 200L * 1024 * 1024;
@@ -54,6 +60,16 @@ public static class PdfImportService
         string? cacheDirectory = null,
         IProgress<PdfImportProgress>? progress = null,
         CancellationToken cancellationToken = default)
+        => (await ImportDocumentAsync(filePath, pageNumbers, targetWidth, targetHeight, cacheDirectory, progress, cancellationToken)).Pages;
+
+    public static async Task<ImportedPdfDocument> ImportDocumentAsync(
+        string filePath,
+        IReadOnlyList<int> pageNumbers,
+        int targetWidth = 840,
+        int targetHeight = 1188,
+        string? cacheDirectory = null,
+        IProgress<PdfImportProgress>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         ValidatePdf(filePath);
         if (targetWidth <= 0 || targetHeight <= 0) throw new ArgumentOutOfRangeException(nameof(targetWidth), "页面尺寸必须大于零。");
@@ -78,6 +94,19 @@ public static class PdfImportService
                 targetHeight,
                 progress,
                 cancellationToken);
+
+            PdfDocumentContent extractedContent;
+            try
+            {
+                extractedContent = await PdfDocumentContentService.ExtractAsync(cache.GetSourcePath(job), requestedPages, progress, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                extractedContent = new PdfDocumentContent(
+                    new Dictionary<int, PdfExtractedPage>(),
+                    Array.Empty<PdfExtractedOutline>(),
+                    new[] { $"PDF 文本提取失败：{exception.Message}" });
+            }
 
             var options = new RenderOptions
             {
@@ -116,7 +145,7 @@ public static class PdfImportService
             }
 
             await cache.MarkCompletedAsync(job, cancellationToken);
-            return result;
+            return new ImportedPdfDocument(job.SourceName, job.SourceFingerprint, result, extractedContent);
         }
         catch (OperationCanceledException)
         {

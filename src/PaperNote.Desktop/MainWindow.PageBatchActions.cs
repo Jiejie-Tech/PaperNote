@@ -1,3 +1,5 @@
+using System.IO;
+using Microsoft.Win32;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -12,12 +14,24 @@ public partial class MainWindow
     private void BatchPageActions_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button) return;
-        var selectedIds = GetSelectedPageIds();
-        var canModify = !_isReadOnly && selectedIds.Count > 0;
-        var selectedPdfCount = _currentNotebook?.Pages.Count(page => selectedIds.Contains(page.Id) && IsPdfBackgroundPage(page)) ?? 0;
+        var menu = CreateBatchPageActionsMenu(GetSelectedPageIds());
+        menu.PlacementTarget = button;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
 
+    private ContextMenu CreateBatchPageActionsMenu(IReadOnlySet<Guid> selectedIds)
+    {
+        var hasSelection = selectedIds.Count > 0;
+        var canModify = !_isReadOnly && hasSelection;
+        var selectedPdfCount = _currentNotebook?.Pages.Count(page => selectedIds.Contains(page.Id) && IsPdfBackgroundPage(page)) ?? 0;
         var menu = new ContextMenu();
         menu.Items.Add(CreateMenuItem("复制所选页面", "", (_, _) => DuplicatePages(GetSelectedPageIds()), canModify));
+        menu.Items.Add(CreateMenuItem("移至笔记开头", "", (_, _) => MovePagesToBoundary(GetSelectedPageIds(), true), canModify));
+        menu.Items.Add(CreateMenuItem("移至笔记末尾", "", (_, _) => MovePagesToBoundary(GetSelectedPageIds(), false), canModify));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(CreateMenuItem("按所选页面导出 PDF…", "", (_, _) => ExportSelectedPageSet(GetSelectedPageIds()), hasSelection));
+        menu.Items.Add(CreateMenuItem("提取为新笔记本…", "", async (_, _) => await ExtractSelectedPagesAsync(GetSelectedPageIds()), hasSelection));
         menu.Items.Add(CreateMenuItem("删除所选页面", "", (_, _) => ConfirmDeleteSelectedPages(), canModify && _currentNotebook is { Pages.Count: > 1 }));
         menu.Items.Add(new Separator());
         menu.Items.Add(CreateMenuItem("为所选页面添加书签", "", (_, _) => SetPagesBookmarked(GetSelectedPageIds(), true), canModify));
@@ -31,29 +45,15 @@ public partial class MainWindow
         menu.Items.Add(CreateMenuItem("清除 PDF 页面裁剪", "", (_, _) => SetPdfPagesCrop(GetSelectedPageIds(), 0), canModify && selectedPdfCount > 0));
         menu.Items.Add(CreateMenuItem("恢复 PDF 原始方向和裁剪", "", (_, _) => ResetPdfPagesTransform(GetSelectedPageIds()), canModify && selectedPdfCount > 0));
         if (selectedPdfCount == 0) menu.Items.Add(new MenuItem { Header = "所选页面中没有 PDF 页面", IsEnabled = false });
-        menu.PlacementTarget = button;
-        menu.Placement = PlacementMode.Bottom;
-        menu.IsOpen = true;
+        return menu;
     }
 
     private bool DuplicatePages(IReadOnlySet<Guid> pageIds)
     {
         if (_currentNotebook is null || pageIds.Count == 0 || _isReadOnly) return false;
         CaptureCurrentPage();
-        var copies = new List<NotebookPage>();
-        for (var index = _currentNotebook.Pages.Count - 1; index >= 0; index--)
-        {
-            var source = _currentNotebook.Pages[index];
-            if (!pageIds.Contains(source.Id)) continue;
-            var copy = CloneNotebookPage(source);
-            copy.CreatedAt = DateTimeOffset.Now;
-            copy.ModifiedAt = copy.CreatedAt;
-            _currentNotebook.Pages.Insert(index + 1, copy);
-            copies.Add(copy);
-        }
-        copies.Reverse();
+        var copies = PageBatchService.Duplicate(_currentNotebook, pageIds);
         if (copies.Count == 0) return false;
-
         var firstCopy = copies[0];
         var copyIds = copies.Select(page => page.Id).ToHashSet();
         _currentPage = firstCopy;
@@ -63,6 +63,51 @@ public partial class MainWindow
         MarkDirty();
         StatusText.Text = copies.Count == 1 ? "已复制 1 页" : $"已批量复制 {copies.Count} 页";
         return true;
+    }
+
+    private bool MovePagesToBoundary(IReadOnlySet<Guid> pageIds, bool toStart)
+    {
+        if (_currentNotebook is null || pageIds.Count == 0 || _isReadOnly) return false;
+        CaptureCurrentPage();
+        var moved = toStart ? PageBatchService.MoveToStart(_currentNotebook, pageIds) : PageBatchService.MoveToEnd(_currentNotebook, pageIds);
+        if (!moved) return false;
+        RefreshPageItems(_currentPage?.Id, pageIds);
+        MarkDirty();
+        StatusText.Text = toStart ? $"已将 {pageIds.Count} 页移至笔记开头" : $"已将 {pageIds.Count} 页移至笔记末尾";
+        return true;
+    }
+
+    private void ExportSelectedPageSet(IReadOnlySet<Guid> pageIds)
+    {
+        if (_currentNotebook is null || pageIds.Count == 0) return;
+        CaptureCurrentPage();
+        var pages = _currentNotebook.Pages.Where(page => pageIds.Contains(page.Id)).ToArray();
+        ShowPdfExportOptions(pages, pages.Length == 1 ? "所选页面" : $"所选 {pages.Length} 页");
+    }
+
+    private async Task ExtractSelectedPagesAsync(IReadOnlySet<Guid> pageIds)
+    {
+        if (_currentNotebook is null || pageIds.Count == 0) return;
+        CaptureCurrentPage();
+        var dialog = new SaveFileDialog
+        {
+            Title = "提取所选页面为新笔记本",
+            Filter = "PaperNote 笔记本 (*.papernote)|*.papernote",
+            FileName = $"{_currentNotebook.Title}-提取页面.papernote",
+            AddExtension = true,
+            DefaultExt = ".papernote"
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            var extracted = PageBatchService.ExtractDocument(_currentNotebook, pageIds, Path.GetFileNameWithoutExtension(dialog.FileName));
+            await _notebookStorage.SaveAsync(extracted, dialog.FileName);
+            StatusText.Text = $"已提取 {extracted.Pages.Count} 页 · {Path.GetFileName(dialog.FileName)}";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+        {
+            MessageBox.Show(this, $"无法提取页面。\n\n{exception.Message}", "提取失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void ConfirmDeleteSelectedPages()
@@ -87,7 +132,7 @@ public partial class MainWindow
         CaptureCurrentPage();
         var oldCurrentIndex = _currentPage is null ? 0 : _currentNotebook.Pages.IndexOf(_currentPage);
         _currentNotebook.Pages.RemoveAll(page => existingIds.Contains(page.Id));
-        RemoveBrokenPageLinks();
+        PageBatchService.CleanupNavigation(_currentNotebook);
         foreach (var pageId in existingIds) InvalidatePageThumbnail(pageId);
         if (_currentPage is null || existingIds.Contains(_currentPage.Id))
         {

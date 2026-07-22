@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$SkipBuild,[switch]$SkipUi,[string]$Serial)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -30,7 +30,30 @@ $sourceAssertions=@(
   @{Path='src\PaperNote.Mobile\Services\AndroidPdfService.cs';Pattern='PrepareImportAsync';Label='staged Android PDF import'},
   @{Path='src\PaperNote.Mobile\Services\AndroidPdfService.cs';Pattern='cache.TryReadPage';Label='Android PDF cache resume'},
   @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='PdfImportCancelButton';Label='visible Android PDF cancellation'},
-  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='PdfPageRangeService.Parse';Label='Android PDF page range selection'}
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='PdfPageRangeService.Parse';Label='Android PDF page range selection'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='PdfStudyMenuButton';Label='PDF study menu automation id'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='搜索 PDF 文本';Label='PDF text search menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='书签与大纲';Label='bookmark and outline menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='当前页内部链接';Label='internal PDF links menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='批注列表';Label='annotation list menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='页面批量管理';Label='page batch menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='按页码范围导出 PDF';Label='range PDF export menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='按页码范围提取为笔记本';Label='range notebook extraction menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.PdfStudy.cs';Pattern='OfflineSearchService';Label='offline PDF search'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.PdfStudy.cs';Pattern='PdfDocumentContentService.ResolveInternalLinks';Label='internal PDF link resolution'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.PdfStudy.cs';Pattern='PageAnnotationService.Build';Label='annotation index'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.PdfStudy.cs';Pattern='PageBatchService.Duplicate';Label='Android batch duplicate'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.PdfStudy.cs';Pattern='PageBatchService.Delete';Label='Android batch delete'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.PdfStudy.cs';Pattern='PageBatchService.ExtractDocument';Label='Android notebook extraction'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.PdfStudy.cs';Pattern='PdfPageRangeService.Parse';Label='Android range parser'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.PdfStudy.cs';Pattern='ExportAndShareAsync';Label='Android export and share'},
+  @{Path='src\PaperNote.Core\Models\NotebookDocument.cs';Pattern='PdfText';Label='stored PDF text'},
+  @{Path='src\PaperNote.Core\Models\NotebookDocument.cs';Pattern='PdfLinks';Label='stored PDF links'},
+  @{Path='src\PaperNote.Core\Models\NotebookDocument.cs';Pattern='Comments';Label='stored page comments'},
+  @{Path='src\PaperNote.Core\Models\NotebookDocument.cs';Pattern='OutlineEntries';Label='stored PDF outline'},
+  @{Path='src\PaperNote.Core\Services\PdfDocumentContentService.cs';Pattern='UglyToad.PdfPig';Label='PdfPig PDF reader'},
+  @{Path='src\PaperNote.Core\Services\PdfDocumentContentService.cs';Pattern='AttachToImportedPages';Label='PDF content attachment'},
+  @{Path='src\PaperNote.Mobile\Services\AndroidPdfService.cs';Pattern='PdfDocumentContentService.ExtractAsync';Label='Android PDF content extraction'}
 )
 foreach($assertion in $sourceAssertions){
   $path=Join-Path $environment.RepoRoot $assertion.Path
@@ -56,6 +79,23 @@ if($LASTEXITCODE-ne 0){throw 'APK metadata inspection failed.'}
 foreach($required in @("name='$package'","versionCode='1'","versionName='1.0.0'","minSdkVersion:'23'","targetSdkVersion:'36'","application: label='PaperNote' icon='res/mipmap","native-code: 'arm64-v8a' 'armeabi-v7a' 'x86' 'x86_64'")){if($badging-notlike "*$required*"){throw "APK metadata assertion failed: $required"}}
 $signature=(& $environment.ApkSigner verify --verbose --print-certs $apk 2>&1|Out-String)
 if($LASTEXITCODE-ne 0-or $signature-notmatch 'Verified using v[12] scheme'){throw 'APK signature check failed.'}
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive=[IO.Compression.ZipFile]::OpenRead($apk)
+try{
+  $entryNames=@($archive.Entries|ForEach-Object{$_.FullName})
+  foreach($requiredEntry in @('assets/THIRD-PARTY-NOTICES.md','assets/legal/third-party/PdfPig-LICENSE.txt')){
+    if($entryNames-notcontains $requiredEntry){throw "APK bundled notice missing: $requiredEntry"}
+  }
+  $noticeEntry=$archive.GetEntry('assets/THIRD-PARTY-NOTICES.md')
+  $noticeReader=[IO.StreamReader]::new($noticeEntry.Open(),[Text.Encoding]::UTF8)
+  try{$noticeText=$noticeReader.ReadToEnd()}finally{$noticeReader.Dispose()}
+  if($noticeText-notmatch 'PdfPig' -or $noticeText-notmatch 'Apache-2.0'){throw 'APK PdfPig notice is incomplete.'}
+  $assemblyEntry=$archive.Entries|Where-Object{$_.FullName-like 'lib/arm64-v8a/libassemblies*.so'}|Select-Object -First 1
+  if(-not $assemblyEntry){throw 'APK arm64 assembly store is missing.'}
+  $assemblyStream=$assemblyEntry.Open();$assemblyMemory=[IO.MemoryStream]::new()
+  try{$assemblyStream.CopyTo($assemblyMemory);$assemblyText=[Text.Encoding]::ASCII.GetString($assemblyMemory.ToArray())}finally{$assemblyMemory.Dispose();$assemblyStream.Dispose()}
+  if($assemblyText-notmatch 'UglyToad\.PdfPig'){throw 'PdfPig assembly was not found in the APK assembly store.'}
+}finally{$archive.Dispose()}
 Write-Host 'ANDROID APK STATIC CHECK PASS';if($SkipUi){return}
 $devices=@(& $environment.Adb devices|ForEach-Object{if($_-match '^(\S+)\s+device$'){$Matches[1]}})
 if([string]::IsNullOrWhiteSpace($Serial)){$Serial=$devices|Where-Object{$_-like 'emulator-*'}|Select-Object -First 1}

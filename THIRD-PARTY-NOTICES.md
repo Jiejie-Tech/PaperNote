@@ -6,6 +6,7 @@ PaperNote includes or depends on the following third-party components. These com
 
 | Component | Version | Used by | License | Project |
 | --- | ---: | --- | --- | --- |
+| PdfPig | 0.1.13 | Windows + Android local PDF text, outline and internal-link extraction | Apache-2.0 | https://github.com/UglyToad/PdfPig |
 | PDFtoImage | 5.2.1 | Windows | MIT | https://github.com/sungaila/PDFtoImage |
 | SkiaSharp / SkiaSharp.NativeAssets.Win32 | 3.119.2 | Windows PDF rendering dependency chain | MIT plus bundled third-party notices | https://github.com/mono/SkiaSharp |
 | bblanchon.PDFium.Win32 | 147.0.7690 | Windows PDF rendering dependency chain | Apache-2.0 | https://github.com/bblanchon/pdfium-binaries |
@@ -14,6 +15,8 @@ PaperNote includes or depends on the following third-party components. These com
 | Microsoft Android bindings, AndroidX, Google Android, Kotlin and related libraries | NuGet-resolved versions | Android dependency chain | MIT, Apache-2.0 and other licenses listed in the bundled notices | https://github.com/dotnet/android |
 | Open Sans | Bundled font files | Android UI | SIL Open Font License 1.1 | https://github.com/googlefonts/opensans |
 | GSAP | 3.14.2 | Promotional video source only | GreenSock Standard “No Charge” License | https://gsap.com/standard-license/ |
+
+PdfPig is used entirely on-device to read existing PDF text layers, document outlines and internal GoTo links. PaperNote does not use PdfPig for network services, and imported source PDFs are not modified.
 
 GSAP is included only in the reproducible promotional video project under `videos/papernote-promo/`; it is not linked into either PaperNote application. Open Sans font files are stored under `src/PaperNote.Mobile/Resources/Fonts/`.
 
@@ -26,6 +29,7 @@ dotnet list .\src\PaperNote.Mobile\PaperNote.Mobile.csproj package --include-tra
 
 ## Included license and notice files
 
+- `legal/third-party/PdfPig-LICENSE.txt`
 - `legal/third-party/PDFtoImage-LICENSE.txt`
 - `legal/third-party/SkiaSharp-LICENSE.txt`
 - `legal/third-party/SkiaSharp-THIRD-PARTY-NOTICES.txt`

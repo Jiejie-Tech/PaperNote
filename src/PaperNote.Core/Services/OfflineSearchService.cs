@@ -29,6 +29,8 @@ public sealed class OfflineSearchService
             Add(document.Id, page.Id, i + 1, "页面标题", page.Title, 7);
             Add(document.Id, page.Id, i + 1, "OCR", page.OcrText, 3);
             Add(document.Id, page.Id, i + 1, "手写识别", page.RecognizedText, 3);
+            Add(document.Id, page.Id, i + 1, "PDF 文本", page.PdfText, 6);
+            foreach (var comment in page.Comments) Add(document.Id, page.Id, i + 1, "文字评论", comment.Text, 6);
             foreach (var tag in page.Tags) Add(document.Id, page.Id, i + 1, "页面标签", tag, 5);
             foreach (var item in page.Objects.Where(item => !item.IsHidden))
                 Add(document.Id, page.Id, i + 1, item.Kind == "Text" ? "文字" : "对象", item.Kind == "Text" ? item.Text : item.Text + " " + item.ShapeKind, 6);
@@ -46,7 +48,7 @@ public sealed class OfflineSearchService
     }
 
     public static string BuildIndexText(NotebookDocument document, NotebookPage page)
-        => string.Join("\n", new[] { document.Title, document.FolderName, string.Join(' ', document.Tags), page.Title, string.Join(' ', page.Tags), page.OcrText, page.RecognizedText, NotebookContentService.BuildPagePlainText(document, page) }.Where(text => !string.IsNullOrWhiteSpace(text)));
+        => string.Join("\n", new[] { document.Title, document.FolderName, string.Join(' ', document.Tags), page.Title, string.Join(' ', page.Tags), page.OcrText, page.RecognizedText, page.PdfText, string.Join(' ', page.Comments.Select(comment => comment.Text)), NotebookContentService.BuildPagePlainText(document, page) }.Where(text => !string.IsNullOrWhiteSpace(text)));
 
     private void Add(Guid notebookId, Guid pageId, int pageNumber, string source, string? text, int weight)
     {

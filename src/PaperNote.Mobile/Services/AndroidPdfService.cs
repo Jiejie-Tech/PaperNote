@@ -30,6 +30,12 @@ public sealed class PreparedAndroidPdfImport : IAsyncDisposable
 
 public sealed record AndroidPdfImportPage(NotebookPage Page, bool FromCache);
 
+public sealed record AndroidPdfImportResult(
+    string SourceName,
+    string SourceFingerprint,
+    IReadOnlyList<AndroidPdfImportPage> Pages,
+    PdfDocumentContent Content);
+
 public sealed class AndroidPdfService
 {
     public const long MaximumFileSizeBytes = 200L * 1024 * 1024;
@@ -97,6 +103,13 @@ public sealed class AndroidPdfService
         IReadOnlyList<int> pageNumbers,
         IProgress<PdfImportProgress>? progress = null,
         CancellationToken cancellationToken = default)
+        => (await ImportDocumentAsync(prepared, pageNumbers, progress, cancellationToken)).Pages;
+
+    public async Task<AndroidPdfImportResult> ImportDocumentAsync(
+        PreparedAndroidPdfImport prepared,
+        IReadOnlyList<int> pageNumbers,
+        IProgress<PdfImportProgress>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(prepared);
         var requestedPages = pageNumbers.Distinct().OrderBy(page => page).ToArray();
@@ -118,6 +131,19 @@ public sealed class AndroidPdfService
                 1188,
                 progress,
                 cancellationToken);
+
+            PdfDocumentContent extractedContent;
+            try
+            {
+                extractedContent = await PdfDocumentContentService.ExtractAsync(cache.GetSourcePath(job), requestedPages, progress, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not System.OperationCanceledException)
+            {
+                extractedContent = new PdfDocumentContent(
+                    new Dictionary<int, PdfExtractedPage>(),
+                    Array.Empty<PdfExtractedOutline>(),
+                    new[] { $"PDF 文本提取失败：{exception.Message}" });
+            }
 
             using var descriptor = ParcelFileDescriptor.Open(new Java.IO.File(cache.GetSourcePath(job)), ParcelFileMode.ReadOnly)
                 ?? throw new InvalidOperationException("无法读取 PDF 文件。");
@@ -157,7 +183,7 @@ public sealed class AndroidPdfService
             }
 
             await cache.MarkCompletedAsync(job, cancellationToken);
-            return pages;
+            return new AndroidPdfImportResult(job.SourceName, job.SourceFingerprint, pages, extractedContent);
         }
         catch (System.OperationCanceledException)
         {

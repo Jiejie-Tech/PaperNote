@@ -14,7 +14,7 @@ public partial class MainWindow
     private void ShowPdfExportOptions(IReadOnlyList<NotebookPage> pages, string scopeName)
     {
         if (pages.Count == 0) return;
-        _pendingPdfExportPages = pages.Select(CloneNotebookPage).ToArray();
+        _pendingPdfExportPages = pages.Select(page => page.Clone(preserveIdentity: true)).ToArray();
         _pendingPdfExportScopeName = scopeName;
         SelectComboBoxItem(PdfExportQualityCombo, "Standard");
         SelectComboBoxItem(PdfExportPageSizeCombo, "A4");

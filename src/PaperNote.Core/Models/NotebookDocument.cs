@@ -16,7 +16,7 @@ public static class NotebookDefaults
 
 public sealed class NotebookDocument
 {
-    public int FormatVersion { get; set; } = 15;
+    public int FormatVersion { get; set; } = 16;
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = "未命名笔记本";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
@@ -32,6 +32,7 @@ public sealed class NotebookDocument
     public DateTimeOffset? TrashedAt { get; set; }
     public List<NotebookPage> Pages { get; set; } = [];
     public List<PaperPreset> PaperPresets { get; set; } = [];
+    public List<DocumentOutlineEntry> OutlineEntries { get; set; } = [];
 
     public static NotebookDocument Create(string title, string? firstPageInkData = null)
     {
@@ -65,6 +66,7 @@ public sealed class NotebookPage
     public string BackgroundImageData { get; set; } = string.Empty;
     public string BackgroundSourceType { get; set; } = string.Empty;
     public string BackgroundSourceName { get; set; } = string.Empty;
+    public string BackgroundSourceFingerprint { get; set; } = string.Empty;
     public int BackgroundPageNumber { get; set; }
     public int BackgroundRotation { get; set; }
     public double BackgroundCropLeft { get; set; }
@@ -75,6 +77,9 @@ public sealed class NotebookPage
     public List<string> Tags { get; set; } = [];
     public string OcrText { get; set; } = string.Empty;
     public string RecognizedText { get; set; } = string.Empty;
+    public string PdfText { get; set; } = string.Empty;
+    public List<PdfPageLink> PdfLinks { get; set; } = [];
+    public List<PageComment> Comments { get; set; } = [];
     public List<PageLayer> Layers { get; set; } = [];
     public Guid? ActiveLayerId { get; set; }
     public List<AudioRecording> AudioRecordings { get; set; } = [];
@@ -96,6 +101,7 @@ public sealed class NotebookPage
             BackgroundImageData = BackgroundImageData,
             BackgroundSourceType = BackgroundSourceType,
             BackgroundSourceName = BackgroundSourceName,
+            BackgroundSourceFingerprint = BackgroundSourceFingerprint,
             BackgroundPageNumber = BackgroundPageNumber,
             BackgroundRotation = BackgroundRotation,
             BackgroundCropLeft = BackgroundCropLeft,
@@ -103,7 +109,8 @@ public sealed class NotebookPage
             BackgroundCropRight = BackgroundCropRight,
             BackgroundCropBottom = BackgroundCropBottom,
             Objects = Objects.Select(item => item.Clone()).ToList(),
-            Tags = Tags.ToList(), OcrText = OcrText, RecognizedText = RecognizedText,
+            Tags = Tags.ToList(), OcrText = OcrText, RecognizedText = RecognizedText, PdfText = PdfText,
+            PdfLinks = PdfLinks.Select(link => link.Clone()).ToList(), Comments = Comments.Select(comment => comment.Clone()).ToList(),
             Layers = Layers.Select(layer => layer.Clone()).ToList(), ActiveLayerId = ActiveLayerId,
             AudioRecordings = AudioRecordings.Select(recording => recording.Clone()).ToList()
         };

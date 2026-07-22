@@ -76,6 +76,7 @@ public partial class MainWindow : Window
         PageListBox.ItemsSource = _pageItems;
         InitializePageNavigation();
         InitializeOutlineNavigation();
+        InitializePdfStudy();
         InitializeWorkspaceNavigation();
         _autosaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(650) };
         _autosaveTimer.Tick += AutosaveTimer_Tick;
@@ -599,7 +600,7 @@ public partial class MainWindow : Window
         if (sourceIndex < 0) return;
 
         var source = _currentNotebook.Pages[sourceIndex];
-        var copy = CloneNotebookPage(source);
+        var copy = source.Clone();
         copy.CreatedAt = DateTimeOffset.Now;
         copy.ModifiedAt = copy.CreatedAt;
         var insertIndex = sourceIndex + 1;
@@ -1079,6 +1080,7 @@ public partial class MainWindow : Window
             if (PdfCropEditorOverlay.Visibility == Visibility.Visible) ClosePdfCropEditor();
             else if (PdfImportOptionsOverlay.Visibility == Visibility.Visible) ClosePdfImportOptions();
             else if (PdfExportOptionsOverlay.Visibility == Visibility.Visible) ClosePdfExportOptions();
+            else if (PdfStudyOverlay.Visibility == Visibility.Visible) ClosePdfStudy();
             else if (OutlineOverlay.Visibility == Visibility.Visible) CloseOutline();
             else if (PageOverviewOverlay.Visibility == Visibility.Visible) ClosePageOverview();
             else goto ContinueShortcutHandling;

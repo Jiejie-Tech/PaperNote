@@ -1,4 +1,4 @@
-﻿using PaperNote.Core.Models;
+using PaperNote.Core.Models;
 using PaperNote.Core.Services;
 
 namespace PaperNote.Mobile.Services;
@@ -110,12 +110,9 @@ public sealed class MobileNotebookRepository
         if (notebook is null || notebook.Pages.Count <= 1) return false;
         var index = notebook.Pages.FindIndex(item => item.Id == pageId);
         if (index < 0) return false;
-        notebook.Pages.RemoveAt(index);
-        notebook.CurrentPageId = notebook.Pages[Math.Clamp(index, 0, notebook.Pages.Count - 1)].Id;
-        foreach (var page in notebook.Pages)
-            foreach (var item in page.Objects.Where(item => item.LinkTargetPageId == pageId))
-                item.LinkTargetPageId = null;
-        return true;
+        var deleted = PageBatchService.Delete(notebook, [pageId]);
+        if (deleted) notebook.CurrentPageId = notebook.Pages[Math.Clamp(index, 0, notebook.Pages.Count - 1)].Id;
+        return deleted;
     }
 
     public async Task<StoredNotebook> ImportNotebookAsync(FileResult file, CancellationToken cancellationToken = default)

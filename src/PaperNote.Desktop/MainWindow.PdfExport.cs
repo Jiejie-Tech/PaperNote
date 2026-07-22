@@ -46,7 +46,7 @@ public partial class MainWindow
 
         ExportPdfButton.IsEnabled = false;
         ExportSelectedPdfButton.IsEnabled = false;
-        var snapshots = pages.Select(CloneNotebookPage).ToArray();
+        var snapshots = pages.Select(page => page.Clone(preserveIdentity: true)).ToArray();
         var progress = new Progress<int>(completed => StatusText.Text = $"正在导出 PDF… {completed}/{snapshots.Length} 页");
         StatusText.Text = $"正在导出{scopeName}…";
         try
@@ -64,32 +64,6 @@ public partial class MainWindow
             ExportPdfButton.IsEnabled = true;
             ExportSelectedPdfButton.IsEnabled = true;
         }
-    }
-
-    private static NotebookPage CloneNotebookPage(NotebookPage source)
-    {
-        return new NotebookPage
-        {
-            Title = source.Title,
-            IsBookmarked = source.IsBookmarked,
-            OutlineLevel = source.OutlineLevel,
-            CreatedAt = source.CreatedAt,
-            ModifiedAt = source.ModifiedAt,
-            InkData = source.InkData,
-            Ink = source.Ink.Clone(),
-            PaperTemplate = source.PaperTemplate,
-            PaperColor = source.PaperColor,
-            BackgroundImageData = source.BackgroundImageData,
-            BackgroundSourceType = source.BackgroundSourceType,
-            BackgroundSourceName = source.BackgroundSourceName,
-            BackgroundPageNumber = source.BackgroundPageNumber,
-            BackgroundRotation = source.BackgroundRotation,
-            BackgroundCropLeft = source.BackgroundCropLeft,
-            BackgroundCropTop = source.BackgroundCropTop,
-            BackgroundCropRight = source.BackgroundCropRight,
-            BackgroundCropBottom = source.BackgroundCropBottom,
-            Objects = source.Objects.Select(item => item.Clone()).ToList()
-        };
     }
 
     private void PdfPageActions_Click(object sender, RoutedEventArgs e)

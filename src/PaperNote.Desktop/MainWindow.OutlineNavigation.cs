@@ -14,9 +14,11 @@ public partial class MainWindow
     private sealed class OutlineEntryView
     {
         public Guid Id { get; init; }
+        public Guid TargetPageId { get; init; }
         public int PageNumber { get; init; }
         public int Level { get; init; }
         public string Title { get; init; } = string.Empty;
+        public bool IsImported { get; init; }
         public string PageText => $"第 {PageNumber} 页";
         public string LevelText => $"{Level} 级";
         public Thickness Indent => new((Level - 1) * 24, 2, 0, 2);
@@ -65,28 +67,48 @@ public partial class MainWindow
         }
 
         var query = OutlineSearchBox.Text.Trim();
-        for (var index = 0; index < _currentNotebook.Pages.Count; index++)
+        foreach (var entry in BuildMergedOutlineEntries())
         {
-            var page = _currentNotebook.Pages[index];
-            if (page.OutlineLevel <= 0) continue;
-            var title = string.IsNullOrWhiteSpace(page.Title) ? $"第 {index + 1} 页" : page.Title;
             if (query.Length > 0 &&
-                !title.Contains(query, StringComparison.OrdinalIgnoreCase) &&
-                !(index + 1).ToString().Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
-            _outlineEntries.Add(new OutlineEntryView
-            {
-                Id = page.Id,
-                PageNumber = index + 1,
-                Level = page.OutlineLevel,
-                Title = title
-            });
+                !entry.Title.Contains(query, StringComparison.OrdinalIgnoreCase) &&
+                !entry.PageNumber.ToString().Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
+            _outlineEntries.Add(entry);
         }
 
-        var preferred = _outlineEntries.FirstOrDefault(entry => entry.Id == selectedId) ?? _outlineEntries.FirstOrDefault();
+        var preferred = _outlineEntries.FirstOrDefault(entry => entry.TargetPageId == selectedId) ?? _outlineEntries.FirstOrDefault();
         OutlineListBox.SelectedItem = preferred;
         if (preferred is not null) OutlineListBox.ScrollIntoView(preferred);
         UpdateOutlineStatus();
     }
+
+    private IReadOnlyList<OutlineEntryView> BuildMergedOutlineEntries()
+    {
+        if (_currentNotebook is null) return [];
+        var results = new List<OutlineEntryView>();
+        var duplicateKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < _currentNotebook.Pages.Count; index++)
+        {
+            var page = _currentNotebook.Pages[index];
+            if (page.OutlineLevel <= 0) continue;
+            var title = string.IsNullOrWhiteSpace(page.Title) ? $"? {index + 1} ?" : page.Title.Trim();
+            duplicateKeys.Add($"{page.Id:N}|{page.OutlineLevel}|{title}");
+            results.Add(new OutlineEntryView { Id = page.Id, TargetPageId = page.Id, PageNumber = index + 1, Level = page.OutlineLevel, Title = title });
+        }
+
+        foreach (var imported in _currentNotebook.OutlineEntries)
+        {
+            if (!imported.TargetPageId.HasValue) continue;
+            var index = _currentNotebook.Pages.FindIndex(page => page.Id == imported.TargetPageId.Value);
+            if (index < 0) continue;
+            var title = string.IsNullOrWhiteSpace(imported.Title) ? $"? {index + 1} ?" : imported.Title.Trim();
+            var level = Math.Clamp(imported.Level, 1, 6);
+            if (!duplicateKeys.Add($"{imported.TargetPageId.Value:N}|{level}|{title}")) continue;
+            results.Add(new OutlineEntryView { Id = imported.Id, TargetPageId = imported.TargetPageId.Value, PageNumber = index + 1, Level = level, Title = title, IsImported = imported.IsImported });
+        }
+        return results.OrderBy(entry => entry.PageNumber).ThenBy(entry => entry.Level).ToArray();
+    }
+
+    private int CountMergedOutlineEntries() => BuildMergedOutlineEntries().Count;
 
     private void RefreshOutlineIfVisible()
     {
@@ -96,7 +118,7 @@ public partial class MainWindow
     private void UpdateOutlineStatus()
     {
         if (OutlineStatusText is null) return;
-        var total = _currentNotebook?.Pages.Count(page => page.OutlineLevel > 0) ?? 0;
+        var total = CountMergedOutlineEntries();
         OutlineStatusText.Text = _outlineEntries.Count == total
             ? $"目录中有 {total} 个页面"
             : $"找到 {_outlineEntries.Count} 个 · 目录共 {total} 个页面";

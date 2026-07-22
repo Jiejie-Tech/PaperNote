@@ -1,4 +1,5 @@
 using PaperNote.Core.Models;
+using PaperNote.Core.Services;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -109,13 +110,6 @@ public partial class MainWindow
     private void RemoveBrokenPageLinks()
     {
         if (_currentNotebook is null) return;
-        var valid = _currentNotebook.Pages.Select(page => page.Id).ToHashSet();
-        foreach (var page in _currentNotebook.Pages)
-        {
-            foreach (var pageObject in page.Objects)
-            {
-                if (pageObject.LinkTargetPageId.HasValue && !valid.Contains(pageObject.LinkTargetPageId.Value)) pageObject.LinkTargetPageId = null;
-            }
-        }
+        PageBatchService.CleanupNavigation(_currentNotebook);
     }
 }

@@ -59,6 +59,27 @@ PaperNote is a local-first handwriting and document annotation application.
 Set-Content -LiteralPath (Join-Path $PublishDir 'README-Release.txt') -Value $releaseReadme -Encoding utf8
 if (Test-Path -LiteralPath $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }
 Compress-Archive -Path (Join-Path $PublishDir '*') -DestinationPath $ZipPath -CompressionLevel Optimal
+
+# Verify that legal notices and user-facing documentation actually reached the archive.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [IO.Compression.ZipFile]::OpenRead($ZipPath)
+try {
+    $entryNames = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\','/') })
+    $requiredPackageEntries = @(
+        'PaperNote.Desktop.exe',
+        'README.md',
+        'THIRD-PARTY-NOTICES.md',
+        'legal/third-party/PdfPig-LICENSE.txt',
+        'docs/USER-GUIDE.md',
+        'docs/DATA-FORMAT.md'
+    )
+    foreach ($entry in $requiredPackageEntries) {
+        if ($entryNames -notcontains $entry) { throw "Release package content check failed: $entry" }
+    }
+} finally {
+    $archive.Dispose()
+}
+
 $hash = (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash
 Set-Content -LiteralPath "$ZipPath.sha256" -Value "$hash  $([IO.Path]::GetFileName($ZipPath))" -Encoding ascii
 Write-Host "RELEASE PACKAGE READY: $ZipPath"

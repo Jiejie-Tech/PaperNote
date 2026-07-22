@@ -167,13 +167,13 @@ public partial class MainWindow
 
         try
         {
-            var importedPages = await PdfImportService.ImportAsync(
+            var importedDocument = await PdfImportService.ImportDocumentAsync(
                 filePath,
                 pageNumbers,
                 cacheDirectory: PdfImportService.GetDefaultCacheDirectory(),
                 progress: progress,
                 cancellationToken: token);
-            InsertImportedPdfPages(importedPages, Path.GetFileName(filePath), placement);
+            InsertImportedPdfPages(importedDocument, placement);
             ClosePdfImportOptionsAfterCompletion();
         }
         catch (OperationCanceledException)
@@ -227,9 +227,17 @@ public partial class MainWindow
     }
 
     private void InsertImportedPdfPages(IReadOnlyList<ImportedPdfPage> importedPages, string sourceName) =>
-        InsertImportedPdfPages(importedPages, sourceName, "AfterCurrent");
+        InsertImportedPdfPages(importedPages, sourceName, "AfterCurrent", PdfDocumentContent.Empty, string.Empty);
 
-    private void InsertImportedPdfPages(IReadOnlyList<ImportedPdfPage> importedPages, string sourceName, string placement)
+    private void InsertImportedPdfPages(ImportedPdfDocument importedDocument, string placement) =>
+        InsertImportedPdfPages(importedDocument.Pages, importedDocument.SourceName, placement, importedDocument.Content, importedDocument.SourceFingerprint);
+
+    private void InsertImportedPdfPages(
+        IReadOnlyList<ImportedPdfPage> importedPages,
+        string sourceName,
+        string placement,
+        PdfDocumentContent? content = null,
+        string sourceFingerprint = "")
     {
         if (_currentNotebook is null || importedPages.Count == 0 || _isReadOnly) return;
         CaptureCurrentPage();
@@ -252,6 +260,7 @@ public partial class MainWindow
         }).ToArray();
 
         _currentNotebook.Pages.InsertRange(insertIndex, newPages);
+        PdfDocumentContentService.AttachToImportedPages(_currentNotebook, newPages, content ?? PdfDocumentContent.Empty, sourceFingerprint);
         var firstPage = newPages[0];
         _currentNotebook.CurrentPageId = firstPage.Id;
         _currentPage = firstPage;

@@ -74,7 +74,7 @@ public sealed partial class NotebookStorageService
     {
         EnsurePathIsInNotebookDirectory(filePath, allowMissing: true);
         NormalizeDocument(document);
-        document.FormatVersion = Math.Max(document.FormatVersion, 15);
+        document.FormatVersion = Math.Max(document.FormatVersion, 16);
         document.ModifiedAt = DateTimeOffset.Now;
         var bytes = JsonSerializer.SerializeToUtf8Bytes(document, _jsonOptions);
         var directory = Path.GetDirectoryName(filePath)
@@ -202,6 +202,7 @@ public sealed partial class NotebookStorageService
             page.BackgroundImageData ??= string.Empty;
             page.BackgroundSourceType = NormalizeBackgroundSourceType(page.BackgroundSourceType, page.BackgroundImageData);
             page.BackgroundSourceName = page.BackgroundSourceType is "PDF" or "Image" && !string.IsNullOrWhiteSpace(page.BackgroundSourceName) ? page.BackgroundSourceName.Trim() : string.Empty;
+            page.BackgroundSourceFingerprint = page.BackgroundSourceType == "PDF" && !string.IsNullOrWhiteSpace(page.BackgroundSourceFingerprint) ? page.BackgroundSourceFingerprint.Trim()[..Math.Min(page.BackgroundSourceFingerprint.Trim().Length, 128)] : string.Empty;
             page.BackgroundPageNumber = page.BackgroundSourceType == "PDF" ? Math.Max(1, page.BackgroundPageNumber) : 0;
             page.BackgroundRotation = NormalizeRightAngleRotation(page.BackgroundRotation);
             page.BackgroundCropLeft = NormalizeCrop(page.BackgroundCropLeft);
@@ -211,6 +212,42 @@ public sealed partial class NotebookStorageService
             page.Tags = NormalizeTags(page.Tags);
             page.OcrText ??= string.Empty;
             page.RecognizedText ??= string.Empty;
+            page.PdfText = page.BackgroundSourceType == "PDF" ? NormalizeIndexedText(page.PdfText) : string.Empty;
+            page.PdfLinks ??= [];
+            page.PdfLinks = page.BackgroundSourceType == "PDF"
+                ? page.PdfLinks.Where(link => link is not null).Take(2000).ToList()
+                : [];
+            var usedPdfLinkIds = new HashSet<Guid>();
+            foreach (var link in page.PdfLinks)
+            {
+                if (link.Id == Guid.Empty || !usedPdfLinkIds.Add(link.Id))
+                {
+                    link.Id = Guid.NewGuid();
+                    usedPdfLinkIds.Add(link.Id);
+                }
+                link.X = NormalizeUnit(link.X);
+                link.Y = NormalizeUnit(link.Y);
+                link.Width = Math.Clamp(NormalizeUnit(link.Width), 0, 1 - link.X);
+                link.Height = Math.Clamp(NormalizeUnit(link.Height), 0, 1 - link.Y);
+                link.TargetSourcePageNumber = Math.Max(0, link.TargetSourcePageNumber);
+                link.Label = NormalizeLimitedText(link.Label, 160);
+            }
+            page.Comments ??= [];
+            page.Comments = page.Comments.Where(comment => comment is not null).Take(2000).ToList();
+            var usedCommentIds = new HashSet<Guid>();
+            foreach (var comment in page.Comments)
+            {
+                if (comment.Id == Guid.Empty || !usedCommentIds.Add(comment.Id))
+                {
+                    comment.Id = Guid.NewGuid();
+                    usedCommentIds.Add(comment.Id);
+                }
+                comment.Text = NormalizeLimitedText(comment.Text, 2000);
+                comment.Color = string.IsNullOrWhiteSpace(comment.Color) ? "#F0B429" : comment.Color.Trim();
+                comment.X = double.IsFinite(comment.X) ? Math.Clamp(comment.X, 0, 840) : 24;
+                comment.Y = double.IsFinite(comment.Y) ? Math.Clamp(comment.Y, 0, 1188) : 24;
+                if (comment.ModifiedAt < comment.CreatedAt) comment.ModifiedAt = comment.CreatedAt;
+            }
             page.Layers ??= [];
             var usedLayerIds = new HashSet<Guid>();
             page.Layers = page.Layers.Where(layer => layer is not null).Select(layer =>
@@ -310,6 +347,10 @@ public sealed partial class NotebookStorageService
             {
                 if (pageObject.LinkTargetPageId.HasValue && !validPageIds.Contains(pageObject.LinkTargetPageId.Value)) pageObject.LinkTargetPageId = null;
             }
+            foreach (var link in page.PdfLinks)
+            {
+                if (link.TargetPageId.HasValue && !validPageIds.Contains(link.TargetPageId.Value)) link.TargetPageId = null;
+            }
         }
 
         if (document.Pages.Count == 0)
@@ -322,6 +363,26 @@ public sealed partial class NotebookStorageService
         {
             document.CurrentPageId = document.Pages[0].Id;
         }
+
+        validPageIds = document.Pages.Select(page => page.Id).ToHashSet();
+        document.OutlineEntries ??= [];
+        document.OutlineEntries = document.OutlineEntries.Where(entry => entry is not null).Take(5000).ToList();
+        var usedOutlineIds = new HashSet<Guid>();
+        foreach (var entry in document.OutlineEntries)
+        {
+            if (entry.Id == Guid.Empty || !usedOutlineIds.Add(entry.Id))
+            {
+                entry.Id = Guid.NewGuid();
+                usedOutlineIds.Add(entry.Id);
+            }
+            entry.Title = NormalizeLimitedText(entry.Title, 200);
+            entry.Level = Math.Clamp(entry.Level, 1, 6);
+            entry.SourceFingerprint = NormalizeLimitedText(entry.SourceFingerprint, 128);
+            entry.SourcePageNumber = Math.Max(0, entry.SourcePageNumber);
+            if (entry.TargetPageId.HasValue && !validPageIds.Contains(entry.TargetPageId.Value)) entry.TargetPageId = null;
+        }
+        document.OutlineEntries.RemoveAll(entry => string.IsNullOrWhiteSpace(entry.Title) || !entry.TargetPageId.HasValue);
+        PdfDocumentContentService.ResolveInternalLinks(document);
     }
 
     private void EnsurePathIsInNotebookDirectory(string filePath, bool allowMissing)
@@ -350,6 +411,23 @@ public sealed partial class NotebookStorageService
         var cleaned = title.Trim();
         return cleaned[..Math.Min(cleaned.Length, 60)];
     }
+
+    private static string NormalizeIndexedText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var normalized = text.Trim();
+        return normalized[..Math.Min(normalized.Length, PdfDocumentContentService.MaximumExtractedCharactersPerPage)];
+    }
+
+    private static string NormalizeLimitedText(string? text, int maximumLength)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var normalized = text.Trim();
+        return normalized[..Math.Min(normalized.Length, maximumLength)];
+    }
+
+    private static double NormalizeUnit(double value)
+        => double.IsFinite(value) ? Math.Clamp(value, 0, 1) : 0;
 
     private static void NormalizePageObject(PageObject pageObject)
     {

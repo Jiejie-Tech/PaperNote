@@ -1,4 +1,5 @@
 ﻿using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
@@ -335,7 +336,7 @@ try
     document.Pages[0].Objects.Add(new PageObject { Kind = "Text", Text = "矩阵分解与特征值" });
     var stored = await storage.CreateAsync(document);
     var loaded = await storage.LoadAsync(stored.FilePath);
-    Assert(loaded.FormatVersion >= 15 && loaded.Pages[0].Ink.Strokes.Count == 2, "保存后应使用格式 15 并保留 PaperInk");
+    Assert(loaded.FormatVersion == 16 && loaded.Pages[0].Ink.Strokes.Count == 2, "保存后应使用格式 16 并保留 PaperInk");
     Assert(NotebookContentService.TryMatch(loaded, "特征值", out var summary) && summary.Length > 0, "全局搜索应匹配文本对象");
 
     loaded.Tags = ["数学", "复习"];
@@ -550,11 +551,152 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
     Assert(traversalCacheRejected, "PDF 缓存清单必须拒绝路径越界");
     await pdfCache.PruneAsync(changedPdfJob.JobId);
 
+    // PDF 学习资料、批注和页面批量操作必须在 Windows/Android 共用格式中完整往返。
+    {
+        var studyStorage = new NotebookStorageService(Path.Combine(root, "StudyNotebooks"), Path.Combine(root, "StudyBackups"));
+        var studyDocument = NotebookDocument.Create("离线 PDF 学习测试");
+        var studyFirst = studyDocument.Pages[0];
+        studyFirst.Title = "第一章";
+        studyFirst.BackgroundImageData = "fixture-image";
+        studyFirst.BackgroundSourceType = "PDF";
+        studyFirst.BackgroundSourceName = "fixture.pdf";
+        studyFirst.BackgroundSourceFingerprint = "fixture-sha256";
+        studyFirst.BackgroundPageNumber = 1;
+        studyFirst.PdfText = "  Linear algebra PDF text  \r\n  eigenvalue lesson  ";
+        var studySecond = new NotebookPage
+        {
+            Title = "第二章", BackgroundImageData = "fixture-image", BackgroundSourceType = "PDF",
+            BackgroundSourceName = "fixture.pdf", BackgroundSourceFingerprint = "fixture-sha256", BackgroundPageNumber = 2,
+            PdfText = "second PDF page"
+        };
+        var studyThird = new NotebookPage { Title = "普通页面" };
+        studyDocument.Pages.Add(studySecond);
+        studyDocument.Pages.Add(studyThird);
+        studyFirst.PdfLinks.Add(new PdfPageLink
+        {
+            X = -2, Y = double.NaN, Width = 5, Height = 5, TargetPageId = studySecond.Id,
+            TargetSourcePageNumber = 2, Label = "  Go to chapter two  "
+        });
+        studyFirst.Objects.Add(new PageObject { Kind = "Text", Text = "linked object", LinkTargetPageId = studyThird.Id });
+        PageAnnotationService.AddComment(studyFirst, "important local comment", "#F0B429", double.PositiveInfinity, -10);
+        studyFirst.Ink.Strokes.Add(new PaperInkStroke { Tool = PaperInkTool.Highlighter, Color = "#F0B429", Points = [new() { X = 1, Y = 2 }] });
+        studyFirst.Ink.Strokes.Add(new PaperInkStroke { Tool = PaperInkTool.Pen, Color = "#3157D5", Points = [new() { X = 3, Y = 4 }] });
+        studyFirst.Objects.Add(new PageObject { Kind = "Text", Text = "typed annotation", StrokeColor = "#1D2530" });
+        studyDocument.OutlineEntries.Add(new DocumentOutlineEntry
+        {
+            Title = "  Imported chapter  ", Level = 99, TargetPageId = studySecond.Id,
+            SourceFingerprint = "fixture-sha256", SourcePageNumber = 2, IsImported = true
+        });
+
+        var studyStored = await studyStorage.CreateAsync(studyDocument);
+        var studyLoaded = await studyStorage.LoadAsync(studyStored.FilePath);
+        Assert(studyLoaded.FormatVersion == 16, "PDF 学习资料应保存为格式 16");
+        Assert(studyLoaded.OutlineEntries.Count == 1 && studyLoaded.OutlineEntries[0].Level == 6, "PDF 目录层级应规范化并往返保存");
+        Assert(studyLoaded.Pages[0].BackgroundSourceFingerprint == "fixture-sha256" && studyLoaded.Pages[0].PdfText.Contains("eigenvalue lesson", StringComparison.Ordinal), "PDF 指纹和文本层应往返保存");
+        Assert(studyLoaded.Pages[0].PdfLinks.Count == 1 && studyLoaded.Pages[0].PdfLinks[0].X == 0 && studyLoaded.Pages[0].PdfLinks[0].Y == 0 && studyLoaded.Pages[0].PdfLinks[0].Width == 1 && studyLoaded.Pages[0].PdfLinks[0].Height == 1, "非法 PDF 链接坐标应限制到页面范围");
+        Assert(studyLoaded.Pages[0].Comments.Count == 1 && studyLoaded.Pages[0].Comments[0].X == 24 && studyLoaded.Pages[0].Comments[0].Y == 0, "文字评论应规范化并往返保存");
+
+        var studySearch = new OfflineSearchService();
+        studySearch.Index(studyLoaded);
+        Assert(studySearch.Search("eigenvalue").Any(hit => hit.Source == "PDF 文本"), "离线搜索应命中 PDF 文本层");
+        Assert(studySearch.Search("important local").Any(hit => hit.Source == "文字评论"), "离线搜索应命中文字评论");
+        Assert(PageAnnotationService.Build(studyLoaded, PageAnnotationKind.Comment, "#F0B429").Count == 1, "批注索引应支持评论和颜色筛选");
+        Assert(PageAnnotationService.Build(studyLoaded, PageAnnotationKind.Highlighter).Count == 1, "批注索引应识别荧光笔");
+        Assert(PageAnnotationService.Build(studyLoaded, PageAnnotationKind.Pen).Count == 1, "批注索引应识别钢笔笔迹");
+        Assert(PageAnnotationService.Build(studyLoaded, PageAnnotationKind.Text).Count >= 2, "批注索引应识别文字对象");
+
+        var loadedFirst = studyLoaded.Pages[0];
+        var loadedSecond = studyLoaded.Pages[1];
+        var loadedThird = studyLoaded.Pages[2];
+        Assert(!PageBatchService.MoveToStart(studyLoaded, [loadedFirst.Id, loadedSecond.Id]), "已在开头的连续页面批量移动应报告无变化");
+        var duplicated = PageBatchService.Duplicate(studyLoaded, [loadedFirst.Id, loadedSecond.Id]);
+        Assert(duplicated.Count == 2 && duplicated[0].PdfLinks.Single().TargetPageId == duplicated[1].Id, "复制多页时应重映射复制页面之间的 PDF 链接");
+        var extracted = PageBatchService.ExtractDocument(studyLoaded, [loadedFirst.Id, loadedSecond.Id], "提取测试");
+        Assert(extracted.Pages.Count == 2 && extracted.Pages[0].PdfLinks.Single().TargetPageId == extracted.Pages[1].Id, "提取为新笔记本时应重映射内部 PDF 链接");
+        Assert(extracted.Pages[0].Objects.First(item => item.Text == "linked object").LinkTargetPageId is null, "提取页面时应清除指向未提取页面的对象链接");
+        Assert(extracted.OutlineEntries.Count == 1 && extracted.OutlineEntries[0].TargetPageId == extracted.Pages[1].Id, "提取页面时应保留并重映射对应目录");
+        Assert(PageBatchService.Delete(studyLoaded, [loadedSecond.Id, duplicated[1].Id]), "批量删除应删除已选页面");
+        Assert(studyLoaded.Pages.First(page => page.Id == loadedFirst.Id).PdfLinks.Single().TargetPageId is null && studyLoaded.OutlineEntries.All(entry => entry.TargetPageId != loadedSecond.Id), "删除最后一个目标源页后应清理 PDF 链接和文档目录");
+        Assert(PageBatchService.RotateBackground(loadedFirst, -1) && loadedFirst.BackgroundRotation == 270, "PDF 页面应支持向左旋转 90 度");
+
+        var resolutionDocument = NotebookDocument.Create("链接续接");
+        var resolutionFirst = resolutionDocument.Pages[0];
+        resolutionFirst.BackgroundImageData = "fixture-image";
+        resolutionFirst.BackgroundSourceType = "PDF";
+        resolutionFirst.BackgroundSourceFingerprint = "same-source";
+        resolutionFirst.BackgroundPageNumber = 1;
+        resolutionFirst.PdfLinks.Add(new PdfPageLink { TargetSourcePageNumber = 2 });
+        var resolutionSecond = new NotebookPage { BackgroundImageData = "fixture-image", BackgroundSourceType = "PDF", BackgroundSourceFingerprint = "same-source", BackgroundPageNumber = 2 };
+        resolutionDocument.Pages.Add(resolutionSecond);
+        PdfDocumentContentService.ResolveInternalLinks(resolutionDocument);
+        Assert(resolutionFirst.PdfLinks[0].TargetPageId == resolutionSecond.Id, "后续导入同一 PDF 页面时应重新解析内部链接目标");
+
+        var fixturePath = Path.Combine(root, "pdf-content-fixture.pdf");
+        await File.WriteAllBytesAsync(fixturePath, CreatePdfContentFixture());
+        var extractedContent = await PdfDocumentContentService.ExtractAsync(fixturePath, [1, 2, 3]);
+        Assert(extractedContent.Pages[1].Text.Contains("PaperNote PDF search fixture", StringComparison.Ordinal), "真实 PDF 文本层应离线提取");
+        Assert(extractedContent.Pages[3].Text.Length == 0, "无文本层 PDF 页面不应导致提取失败");
+        Assert(extractedContent.Outline.Any(item => item.Title.Contains("Fixture chapter", StringComparison.Ordinal) && item.TargetPageNumber == 1), "PDF 原目录应提取并映射源页码");
+        Assert(extractedContent.Pages[1].Links.Any(item => item.TargetPageNumber == 2), "PDF 内部 GoTo 链接应提取并映射源页码");
+
+        var attachedDocument = NotebookDocument.Create("附件映射");
+        attachedDocument.Pages.Clear();
+        var attachedOne = new NotebookPage { BackgroundImageData = "fixture-image", BackgroundSourceType = "PDF", BackgroundPageNumber = 1 };
+        var attachedTwo = new NotebookPage { BackgroundImageData = "fixture-image", BackgroundSourceType = "PDF", BackgroundPageNumber = 2 };
+        attachedDocument.Pages.AddRange([attachedOne, attachedTwo]);
+        attachedDocument.CurrentPageId = attachedOne.Id;
+        PdfDocumentContentService.AttachToImportedPages(attachedDocument, [attachedOne, attachedTwo], extractedContent, "fixture-fingerprint");
+        Assert(attachedOne.PdfText.Contains("PaperNote PDF search fixture", StringComparison.Ordinal) && attachedOne.PdfLinks.Single().TargetPageId == attachedTwo.Id, "PDF 内容附加时应映射文本和已导入目标页");
+        Assert(attachedDocument.OutlineEntries.Any(entry => entry.TargetPageId == attachedOne.Id && entry.IsImported), "PDF 原目录应写入跨平台笔记格式");
+    }
+
     Console.WriteLine("PAPERNOTE CORE TESTS PASS");
 }
 finally
 {
     if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+}
+
+static byte[] CreatePdfContentFixture()
+{
+    const string firstStream = "BT /F1 14 Tf 72 720 Td (PaperNote PDF search fixture) Tj ET";
+    const string secondStream = "BT /F1 14 Tf 72 720 Td (Second local PDF page) Tj ET";
+    var objects = new Dictionary<int, string>
+    {
+        [1] = "<< /Type /Catalog /Pages 2 0 R /Outlines 8 0 R >>",
+        [2] = "<< /Type /Pages /Kids [3 0 R 4 0 R 11 0 R] /Count 3 >>",
+        [3] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R /Annots [9 0 R] >>",
+        [4] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>",
+        [5] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        [6] = $"<< /Length {Encoding.ASCII.GetByteCount(firstStream)} >>\nstream\n{firstStream}\nendstream",
+        [7] = $"<< /Length {Encoding.ASCII.GetByteCount(secondStream)} >>\nstream\n{secondStream}\nendstream",
+        [8] = "<< /Type /Outlines /First 10 0 R /Last 10 0 R /Count 1 >>",
+        [9] = "<< /Type /Annot /Subtype /Link /Rect [72 650 240 680] /Border [0 0 0] /A << /S /GoTo /D [4 0 R /Fit] >> /Contents (Go to second page) >>",
+        [10] = "<< /Title (Fixture chapter) /Parent 8 0 R /Dest [3 0 R /Fit] >>",
+        [11] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 12 0 R >>",
+        [12] = "<< /Length 0 >>\nstream\n\nendstream"
+    };
+
+    using var output = new MemoryStream();
+    static void WriteAscii(Stream stream, string text)
+    {
+        var bytes = Encoding.ASCII.GetBytes(text);
+        stream.Write(bytes, 0, bytes.Length);
+    }
+
+    WriteAscii(output, "%PDF-1.4\n%PaperNote\n");
+    var offsets = new long[objects.Count + 1];
+    for (var number = 1; number <= objects.Count; number++)
+    {
+        offsets[number] = output.Position;
+        WriteAscii(output, $"{number} 0 obj\n{objects[number]}\nendobj\n");
+    }
+    var xrefOffset = output.Position;
+    WriteAscii(output, $"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n");
+    for (var number = 1; number <= objects.Count; number++)
+        WriteAscii(output, $"{offsets[number]:D10} 00000 n \n");
+    WriteAscii(output, $"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xrefOffset}\n%%EOF\n");
+    return output.ToArray();
 }
 
 static void Assert(bool condition, string message)

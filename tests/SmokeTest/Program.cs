@@ -40,11 +40,13 @@ internal static class Program
             Assert(PdfImportService.GetPageCount(pdfTestPath) == 3, "PDF page count should be read before range selection.");
 
             var firstProgress = new RecordingPdfProgress();
-            importedPdfPages = await PdfImportService.ImportAsync(
+            var importedPdfDocument = await PdfImportService.ImportDocumentAsync(
                 pdfTestPath,
                 new[] { 1, 2, 3 },
                 cacheDirectory: pdfCachePath,
                 progress: firstProgress);
+            importedPdfPages = importedPdfDocument.Pages;
+            Assert(importedPdfDocument.SourceFingerprint.Length == 64 && importedPdfDocument.Content.Pages.Count == 3, "PDF import should return a SHA-256 source identity and extracted content for every requested page.");
             Assert(importedPdfPages.Count == 3, "PDF import should return all three pages.");
             Assert(importedPdfPages.Select(item => item.PageNumber).SequenceEqual(new[] { 1, 2, 3 }), "PDF import page numbers are incorrect.");
             Assert(importedPdfPages.All(item => PageThumbnailService.DecodeImageData(item.ImageData) is BitmapSource { PixelWidth: 840, PixelHeight: 1188 }), "Imported PDF pages should be self-contained 840 x 1188 image backgrounds.");
@@ -66,7 +68,7 @@ internal static class Program
             using var cancellation = new CancellationTokenSource();
             var cancelProgress = new RecordingPdfProgress(item =>
             {
-                if (item.CompletedPages == 1) cancellation.Cancel();
+                if (item.Stage == "渲染" && item.CompletedPages == 1) cancellation.Cancel();
             });
             var cancelled = false;
             try
@@ -296,7 +298,7 @@ internal static class Program
             await testService.SaveAsync(document, tempPath);
 
             var loaded = await testService.LoadAsync(tempPath);
-            Assert(loaded.FormatVersion == 15, "Format version should be 15.");
+            Assert(loaded.FormatVersion == 16, "Format version should be 16.");
             Assert(loaded.LastOpenedAt == document.LastOpenedAt, "最近打开时间应往返保持。");
             Assert(loaded.FolderName == "课程" && loaded.CoverStyle == "Purple", "文件夹与封面应往返保持");
             Assert(!loaded.IsInTrash && loaded.TrashedAt is null, "新笔记本默认不在回收站");
@@ -588,7 +590,7 @@ internal static class Program
         Assert(!Directory.Exists(packageTestRoot), "整库备份包测试目录应精确清理。");
 
         Console.WriteLine("PAPERNOTE CORE BACKGROUND SMOKE TEST PASS");
-        Console.WriteLine("整库搜索与文字提取、更多形状、工作区标签恢复、共享纸张模板、整库备份包、重复导入跳过、冲突副本恢复、损坏包拒绝和临时目录隔离均通过");
+        Console.WriteLine("PDF 文本层、目录与内部链接提取、整库搜索与文字提取、更多形状、工作区标签恢复、共享纸张模板、整库备份包、重复导入跳过、冲突副本恢复、损坏包拒绝和临时目录隔离均通过");
     }
 
     private static void CreateTestPdf(string filePath)

@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using PaperNote.Desktop;
+using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
 using PaperNote.Desktop.Services;
 using PaperNote.Core.Services;
@@ -449,6 +450,50 @@ internal static class Program
             Assert(!(bool)(Invoke(window, "DeletePages", importDocument.Pages.Select(item => item.Id).ToHashSet()) ?? true), "Batch page deletion must keep at least one page.");
             Assert((bool)(Invoke(window, "ResetPdfPagesTransform", batchIds) ?? false) && importDocument.Pages.Skip(1).All(item => item.BackgroundRotation == 0 && item.BackgroundCropLeft == 0), "Batch PDF reset should restore original transforms.");
 
+            var batchMenu = (ContextMenu)(Invoke(window, "CreateBatchPageActionsMenu", batchIds) ?? throw new InvalidOperationException("Missing page batch actions menu."));
+            Assert(MenuContainsHeader(batchMenu.Items, "复制所选页面") && MenuContainsHeader(batchMenu.Items, "移至笔记开头") && MenuContainsHeader(batchMenu.Items, "移至笔记末尾"), "Batch page menu should expose duplicate and boundary move actions.");
+            Assert(MenuContainsHeader(batchMenu.Items, "按所选页面导出 PDF…") && MenuContainsHeader(batchMenu.Items, "提取为新笔记本…") && MenuContainsHeader(batchMenu.Items, "删除所选页面"), "Batch page menu should expose range export, notebook extraction and deletion.");
+
+            importDocument.Pages[1].PdfText = "offline eigenvalue PDF lesson";
+            importDocument.Pages[1].OutlineLevel = 1;
+            importDocument.Pages[1].PdfLinks = [new PdfPageLink { TargetPageId = importDocument.Pages[2].Id, TargetSourcePageNumber = 3, Label = "下一章" }];
+            PageAnnotationService.AddComment(importDocument.Pages[1], "重点公式", "#F0B429");
+            importDocument.Pages[1].Ink.Strokes.Add(new PaperInkStroke { Tool = PaperInkTool.Highlighter, Color = "#F0B429", Points = [new() { X = 10, Y = 10 }] });
+            importDocument.OutlineEntries.Add(new DocumentOutlineEntry { Title = "PDF 原目录", Level = 2, TargetPageId = importDocument.Pages[2].Id, SourcePageNumber = 3, IsImported = true });
+            SetField(window, "_currentPage", importDocument.Pages[1]);
+            Invoke(window, "LoadPage", importDocument.Pages[1]);
+            Invoke(window, "OpenPdfStudy");
+            var pdfStudyOverlay = (Border)(window.FindName("PdfStudyOverlay") ?? throw new InvalidOperationException("Missing PDF study overlay."));
+            var pdfStudySearchBox = (TextBox)(window.FindName("PdfStudySearchBox") ?? throw new InvalidOperationException("Missing PDF study search box."));
+            var pdfStudyResults = (ListBox)(window.FindName("PdfStudyResultsList") ?? throw new InvalidOperationException("Missing PDF study results."));
+            var pdfStudyOutline = (ListBox)(window.FindName("PdfStudyOutlineList") ?? throw new InvalidOperationException("Missing PDF study outline."));
+            var pdfStudyLinks = (ListBox)(window.FindName("PdfStudyLinksList") ?? throw new InvalidOperationException("Missing PDF study links."));
+            var pdfStudyAnnotations = (ListBox)(window.FindName("PdfStudyAnnotationList") ?? throw new InvalidOperationException("Missing PDF study annotations."));
+            var pdfStudyKind = (ComboBox)(window.FindName("PdfStudyAnnotationKind") ?? throw new InvalidOperationException("Missing PDF study annotation kind filter."));
+            var pdfStudyColor = (ComboBox)(window.FindName("PdfStudyAnnotationColor") ?? throw new InvalidOperationException("Missing PDF study annotation color filter."));
+            var pdfStudyCommentBox = (TextBox)(window.FindName("PdfStudyCommentBox") ?? throw new InvalidOperationException("Missing PDF study comment box."));
+            Assert(pdfStudyOverlay.Visibility == Visibility.Visible && window.FindName("PdfStudyCloseButton") is Button, "PDF study center should open and expose a close button without showing the window.");
+            pdfStudySearchBox.Text = "eigenvalue";
+            Assert(pdfStudyResults.Items.Count == 1 && pdfStudyOutline.Items.Count >= 2 && pdfStudyLinks.Items.Count == 1, "PDF study center should populate search, merged outline and internal links.");
+            Assert(pdfStudyAnnotations.Items.Count >= 2, "PDF study center should list comments and ink annotations.");
+            var commentsBeforeAdd = importDocument.Pages[1].Comments.Count;
+            pdfStudyCommentBox.Text = "后台添加评论";
+            Invoke(window, "PdfStudyAddComment_Click", window, new RoutedEventArgs());
+            Assert(importDocument.Pages[1].Comments.Count == commentsBeforeAdd + 1 && pdfStudyCommentBox.Text.Length == 0, "PDF study center should add a local text comment.");
+            pdfStudyKind.SelectedIndex = 1;
+            pdfStudyColor.SelectedIndex = 1;
+            Assert(pdfStudyAnnotations.Items.Count == importDocument.Pages[1].Comments.Count, "PDF study annotation filters should combine type and color.");
+            pdfStudyAnnotations.SelectedIndex = 0;
+            Invoke(window, "PdfStudyDeleteComment_Click", window, new RoutedEventArgs());
+            Assert(importDocument.Pages[1].Comments.Count == commentsBeforeAdd, "PDF study center should delete the selected text comment.");
+            pdfStudyKind.SelectedIndex = 0;
+            pdfStudyColor.SelectedIndex = 0;
+            pdfStudyLinks.SelectedIndex = 0;
+            Assert((bool)(Invoke(window, "JumpToPdfStudyLink") ?? false) && importDocument.CurrentPageId == importDocument.Pages[2].Id && pdfStudyOverlay.Visibility == Visibility.Collapsed, "PDF internal link should jump to an imported target page and close the study center.");
+            Invoke(window, "OpenPdfStudy");
+            Invoke(window, "ClosePdfStudy");
+            Assert(pdfStudyOverlay.Visibility == Visibility.Collapsed, "PDF study center should close cleanly through the same path used by the close button and Escape shortcut.");
+
             var pageTitleBox = (TextBox)(window.FindName("PageTitleBox") ?? throw new InvalidOperationException("Missing page title box."));
             var pageSearchBox = (TextBox)(window.FindName("PageSearchBox") ?? throw new InvalidOperationException("Missing page search box."));
             var bookmarkToggle = (ToggleButton)(window.FindName("BookmarkedPagesOnlyToggle") ?? throw new InvalidOperationException("Missing bookmark filter."));
@@ -799,7 +844,7 @@ internal static class Program
             Assert(File.Exists(closeWorkspacePath), "Window close should persist workspace state without blocking the UI thread.");
 
             Console.WriteLine("BACKGROUND WPF UI TEST PASS");
-            Console.WriteLine("隐藏 WPF 的恢复中心、整库搜索、文字提取、更多形状、可见标签条、书架排序、资料库备份入口、共享模板、多笔型、压感曲线、笔迹平滑、PDF 工具、页面导航、数据容错，以及异步关闭保存均通过");
+            Console.WriteLine("隐藏 WPF 的恢复中心、整库搜索、PDF 文本搜索与目录、内部链接跳转、批注筛选与文字评论、页面批量菜单、文字提取、更多形状、可见标签条、书架排序、资料库备份入口、共享模板、多笔型、压感曲线、笔迹平滑、PDF 工具、页面导航、数据容错，以及异步关闭保存均通过");
         }
         finally
         {
@@ -905,10 +950,24 @@ internal static class Program
 
     private static object? Invoke(object target, string methodName, params object?[] arguments)
     {
-        var method = target.GetType().GetMethods(BindingFlags.Instance | BindingFlags.NonPublic)
-            .SingleOrDefault(candidate => candidate.Name == methodName && candidate.GetParameters().Length == arguments.Length)
+        var methods = target.GetType().GetMethods(BindingFlags.Instance | BindingFlags.NonPublic)
+            .Where(candidate => candidate.Name == methodName)
+            .ToArray();
+        static bool ParametersMatch(ParameterInfo[] parameters, object?[] values)
+            => values.Select((value, index) => value is null
+                ? !parameters[index].ParameterType.IsValueType || Nullable.GetUnderlyingType(parameters[index].ParameterType) is not null
+                : parameters[index].ParameterType.IsInstanceOfType(value)).All(matches => matches);
+        var method = methods.SingleOrDefault(candidate => candidate.GetParameters().Length == arguments.Length && ParametersMatch(candidate.GetParameters(), arguments))
+            ?? methods.SingleOrDefault(candidate => candidate.GetParameters().Length > arguments.Length
+                && candidate.GetParameters().Skip(arguments.Length).All(parameter => parameter.IsOptional)
+                && ParametersMatch(candidate.GetParameters(), arguments))
             ?? throw new MissingMethodException(target.GetType().FullName, methodName);
-        return method.Invoke(target, arguments);
+        var parameters = method.GetParameters();
+        if (parameters.Length == arguments.Length) return method.Invoke(target, arguments);
+        var expanded = new object?[parameters.Length];
+        Array.Copy(arguments, expanded, arguments.Length);
+        for (var index = arguments.Length; index < expanded.Length; index++) expanded[index] = Type.Missing;
+        return method.Invoke(target, expanded);
     }
 
     private static object? InvokeStatic(Type type, string methodName, params object?[] arguments)

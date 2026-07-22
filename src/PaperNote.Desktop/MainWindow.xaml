@@ -330,6 +330,7 @@
                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="ToggleSidebar_Click" ToolTip="显示或隐藏页面侧栏">☰ 页面</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="OpenPageOverview_Click" ToolTip="打开页面网格总览 (Ctrl+Shift+O)">▦ 总览</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="OpenOutline_Click" ToolTip="打开笔记目录 (Ctrl+Shift+D)">☷ 目录</Button>
+                        <Button AutomationProperties.AutomationId="PdfStudyOpenButton" Style="{StaticResource ToolbarButtonStyle}" Click="OpenPdfStudy_Click" ToolTip="搜索 PDF 文本、浏览目录/链接和管理批注">PDF 学习</Button>
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                         <TextBox x:Name="NotebookTitleBox" Width="220" FontSize="17" FontWeight="SemiBold" Foreground="#202124" BorderThickness="0" Background="Transparent" VerticalContentAlignment="Center" TextChanged="NotebookTitleBox_TextChanged" ToolTip="点击修改笔记本名称" />
@@ -695,6 +696,83 @@
             </Border>
 
             <!-- 笔记目录 -->
+            <!-- PDF 学习中心 -->
+            <Border x:Name="PdfStudyOverlay" AutomationProperties.AutomationId="PdfStudyOverlay" Grid.RowSpan="4" Panel.ZIndex="70" Visibility="Collapsed" Background="#B8202530">
+                <Border Width="1040" Height="720" Background="White" CornerRadius="18" HorizontalAlignment="Center" VerticalAlignment="Center" Effect="{DynamicResource CardShadow}">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="76" /><RowDefinition Height="*" /><RowDefinition Height="58" /></Grid.RowDefinitions>
+                        <Border Grid.Row="0" BorderBrush="#E2E5EA" BorderThickness="0,0,0,1">
+                            <Grid Margin="26,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="PDF 学习中心" FontSize="22" FontWeight="SemiBold" Foreground="#252932" />
+                                    <TextBlock Text="全文搜索、目录与内部链接、统一批注列表，全程离线" Margin="0,4,0,0" FontSize="12" Foreground="#7B818D" />
+                                </StackPanel>
+                                <Button Grid.Column="1" x:Name="PdfStudyCloseButton" AutomationProperties.AutomationId="PdfStudyCloseButton" Style="{StaticResource ToolbarButtonStyle}" MinWidth="74" Click="ClosePdfStudy_Click">完成</Button>
+                            </Grid>
+                        </Border>
+                        <TabControl Grid.Row="1" Margin="18,12,18,8" Background="Transparent" BorderBrush="#DDE2EA">
+                            <TabItem Header="文本搜索">
+                                <Grid Margin="14"><Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <TextBox x:Name="PdfStudySearchBox" AutomationProperties.AutomationId="PdfStudySearchBox" Height="34" Padding="10,5" VerticalContentAlignment="Center" BorderBrush="#D6DBE5" TextChanged="PdfStudySearchBox_TextChanged" KeyDown="PdfStudySearchBox_KeyDown" ToolTip="搜索当前笔记本中的 PDF 文本、批注和文字对象" />
+                                        <Button Grid.Column="1" x:Name="PdfStudyJumpButton" AutomationProperties.AutomationId="PdfStudyJumpButton" Style="{StaticResource PrimaryButtonStyle}" MinWidth="96" Margin="10,0,0,0" Click="PdfStudyJump_Click">打开页面</Button>
+                                    </Grid>
+                                    <ListBox x:Name="PdfStudyResultsList" AutomationProperties.AutomationId="PdfStudyResultsList" Grid.Row="1" BorderThickness="0" Background="Transparent" MouseDoubleClick="PdfStudyResultsList_MouseDoubleClick">
+                                        <ListBox.ItemTemplate><DataTemplate>
+                                            <Border Margin="0,3" Padding="12,10" Background="#F7F9FC" BorderBrush="#E3E7EE" BorderThickness="1" CornerRadius="9">
+                                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                    <StackPanel><TextBlock Text="{Binding PageText}" FontWeight="SemiBold" Foreground="#176B61" /><TextBlock Text="{Binding Source}" Margin="0,3,0,0" FontSize="11" Foreground="#777F8C" /></StackPanel>
+                                                    <StackPanel Grid.Column="1"><TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#2F3540" /><TextBlock Text="{Binding Snippet}" Margin="0,4,0,0" Foreground="#5F6672" TextWrapping="Wrap" MaxHeight="44" /></StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate></ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Grid>
+                            </TabItem>
+                            <TabItem Header="目录与链接">
+                                <Grid Margin="14"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Grid><Grid.RowDefinitions><RowDefinition Height="36" /><RowDefinition Height="*" /><RowDefinition Height="44" /></Grid.RowDefinitions>
+                                        <TextBlock Text="笔记目录 / PDF 原目录" FontSize="15" FontWeight="SemiBold" Foreground="#303642" />
+                                        <ListBox x:Name="PdfStudyOutlineList" AutomationProperties.AutomationId="PdfStudyOutlineList" Grid.Row="1" BorderThickness="0" Background="Transparent" MouseDoubleClick="PdfStudyOutlineList_MouseDoubleClick">
+                                            <ListBox.ItemTemplate><DataTemplate><Border Margin="{Binding Indent}" Padding="10,8" Background="#F7F9FC" CornerRadius="8"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="72" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock Text="{Binding LevelText}" Foreground="#718096" FontSize="11" /><TextBlock Grid.Column="1" Text="{Binding Display}" TextTrimming="CharacterEllipsis" Foreground="#2F3540" /></Grid></Border></DataTemplate></ListBox.ItemTemplate>
+                                        </ListBox>
+                                        <Button Grid.Row="2" Style="{StaticResource PrimaryButtonStyle}" HorizontalAlignment="Right" MinWidth="96" Click="PdfStudyOutlineJump_Click">打开目录项</Button>
+                                    </Grid>
+                                    <Grid Grid.Column="2"><Grid.RowDefinitions><RowDefinition Height="36" /><RowDefinition Height="*" /><RowDefinition Height="44" /></Grid.RowDefinitions>
+                                        <TextBlock Text="当前页 PDF 内部链接" FontSize="15" FontWeight="SemiBold" Foreground="#303642" />
+                                        <ListBox x:Name="PdfStudyLinksList" AutomationProperties.AutomationId="PdfStudyLinksList" Grid.Row="1" BorderThickness="0" Background="Transparent" MouseDoubleClick="PdfStudyLinksList_MouseDoubleClick">
+                                            <ListBox.ItemTemplate><DataTemplate><Border Margin="0,3" Padding="10,8" Background="#F7F9FC" CornerRadius="8"><StackPanel><TextBlock Text="{Binding Label}" FontWeight="SemiBold" Foreground="#2F3540" /><TextBlock Text="{Binding Detail}" Margin="0,3,0,0" FontSize="11" Foreground="#718096" /></StackPanel></Border></DataTemplate></ListBox.ItemTemplate>
+                                        </ListBox>
+                                        <Button Grid.Row="2" Style="{StaticResource PrimaryButtonStyle}" HorizontalAlignment="Right" MinWidth="96" Click="PdfStudyLinkJump_Click">打开链接</Button>
+                                    </Grid>
+                                </Grid>
+                            </TabItem>
+                            <TabItem Header="批注列表">
+                                <Grid Margin="14"><Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="*" /><RowDefinition Height="64" /></Grid.RowDefinitions>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="类型" VerticalAlignment="Center" Foreground="#626977" />
+                                        <ComboBox x:Name="PdfStudyAnnotationKind" AutomationProperties.AutomationId="PdfStudyAnnotationKind" Width="118" Height="32" Margin="8,0,18,0" SelectionChanged="PdfStudyAnnotationFilter_Changed"><ComboBoxItem Content="全部" Tag="All" /><ComboBoxItem Content="文字评论" Tag="Comment" /><ComboBoxItem Content="荧光笔" Tag="Highlighter" /><ComboBoxItem Content="钢笔" Tag="Pen" /><ComboBoxItem Content="文字" Tag="Text" /><ComboBoxItem Content="图片" Tag="Image" /><ComboBoxItem Content="形状" Tag="Shape" /></ComboBox>
+                                        <TextBlock Text="颜色" VerticalAlignment="Center" Foreground="#626977" />
+                                        <ComboBox x:Name="PdfStudyAnnotationColor" AutomationProperties.AutomationId="PdfStudyAnnotationColor" Width="132" Height="32" Margin="8,0,0,0" SelectionChanged="PdfStudyAnnotationFilter_Changed"><ComboBoxItem Content="全部颜色" Tag="" /><ComboBoxItem Content="黄色" Tag="#F0B429" /><ComboBoxItem Content="深灰" Tag="#1D2530" /><ComboBoxItem Content="蓝色" Tag="#3978F6" /><ComboBoxItem Content="红色" Tag="#D64545" /><ComboBoxItem Content="绿色" Tag="#1E8F65" /></ComboBox>
+                                    </StackPanel>
+                                    <ListBox x:Name="PdfStudyAnnotationList" AutomationProperties.AutomationId="PdfStudyAnnotationList" Grid.Row="1" BorderThickness="0" Background="Transparent" MouseDoubleClick="PdfStudyAnnotationList_MouseDoubleClick">
+                                        <ListBox.ItemTemplate><DataTemplate><Border Margin="0,3" Padding="12,9" Background="#F7F9FC" BorderBrush="#E3E7EE" BorderThickness="1" CornerRadius="9"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="88" /><ColumnDefinition Width="*" /><ColumnDefinition Width="100" /></Grid.ColumnDefinitions><TextBlock Text="{Binding KindText}" FontWeight="SemiBold" Foreground="#176B61" /><TextBlock Grid.Column="1" Text="{Binding Preview}" TextTrimming="CharacterEllipsis" Foreground="#3A404B" /><TextBlock Grid.Column="2" Text="{Binding PageText}" HorizontalAlignment="Right" Foreground="#717886" /></Grid></Border></DataTemplate></ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="128" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <TextBox x:Name="PdfStudyCommentBox" AutomationProperties.AutomationId="PdfStudyCommentBox" Height="36" Padding="10,5" VerticalContentAlignment="Center" BorderBrush="#D6DBE5" ToolTip="在当前页添加本地文字评论" />
+                                        <ComboBox x:Name="PdfStudyCommentColor" Grid.Column="1" Height="34" Margin="8,0" SelectedIndex="0"><ComboBoxItem Content="黄色" Tag="#F0B429" /><ComboBoxItem Content="蓝色" Tag="#3978F6" /><ComboBoxItem Content="红色" Tag="#D64545" /><ComboBoxItem Content="绿色" Tag="#1E8F65" /></ComboBox>
+                                        <Button Grid.Column="2" AutomationProperties.AutomationId="PdfStudyAddCommentButton" Style="{StaticResource PrimaryButtonStyle}" MinWidth="92" Click="PdfStudyAddComment_Click">添加评论</Button>
+                                        <Button Grid.Column="3" Style="{StaticResource ToolbarButtonStyle}" MinWidth="92" Margin="8,0,0,0" Click="PdfStudyDeleteComment_Click">删除评论</Button>
+                                        <Button Grid.Column="4" Style="{StaticResource ToolbarButtonStyle}" MinWidth="92" Margin="8,0,0,0" Click="PdfStudyAnnotationJump_Click">打开页面</Button>
+                                    </Grid>
+                                </Grid>
+                            </TabItem>
+                        </TabControl>
+                        <Border Grid.Row="2" BorderBrush="#E2E5EA" BorderThickness="0,1,0,0"><Grid Margin="26,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock x:Name="PdfStudyStatusText" Text="当前笔记没有可搜索的 PDF 文本" VerticalAlignment="Center" Foreground="#6F7683" FontSize="12" /><TextBlock Grid.Column="1" Text="扫描版 PDF 需要离线 OCR 后才能搜索文字" VerticalAlignment="Center" Foreground="#8B6A1F" FontSize="12" /></Grid></Border>
+                    </Grid>
+                </Border>
+            </Border>
+
             <Border x:Name="OutlineOverlay" Grid.RowSpan="4" Panel.ZIndex="60" Visibility="Collapsed" Background="#B8202530">
                 <Border Width="680" Height="650" Background="White" CornerRadius="18" HorizontalAlignment="Center" VerticalAlignment="Center" Effect="{DynamicResource CardShadow}">
                     <Grid>
