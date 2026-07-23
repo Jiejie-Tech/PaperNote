@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using PaperNote.Core.Ink;
@@ -399,6 +400,51 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
     var encryption = new NotebookEncryptionService();
     var encrypted = encryption.Encrypt(loaded, "correct horse battery");
     Assert(NotebookEncryptionService.IsEncrypted(encrypted) && encryption.Decrypt(encrypted, "correct horse battery").Title == loaded.Title, "笔记本加密应可往返");
+    Assert(encryption.TryReadMetadata(encrypted, out var encryptionMetadata) && encryptionMetadata.Title == loaded.Title && encryptionMetadata.PageCount == loaded.Pages.Count, "PNENC2 应在不解锁正文时读取已认证书架元数据");
+    var metadataTampered = encrypted.ToArray();
+    metadataTampered[10] ^= 0x01;
+    try { _ = encryption.Decrypt(metadataTampered, "correct horse battery"); Assert(false, "篡改加密元数据后不应解密成功"); }
+    catch (UnauthorizedAccessException) { }
+    var cipherTampered = encrypted.ToArray();
+    cipherTampered[^1] ^= 0x01;
+    try { _ = encryption.Decrypt(cipherTampered, "correct horse battery"); Assert(false, "篡改加密正文后不应解密成功"); }
+    catch (UnauthorizedAccessException) { }
+    try { _ = encryption.Decrypt(encrypted, "wrong password value"); Assert(false, "错误密码不应解锁笔记本"); }
+    catch (UnauthorizedAccessException) { }
+    try { _ = encryption.Encrypt(loaded, "short"); Assert(false, "短密码不应被接受"); }
+    catch (ArgumentException) { }
+
+    var encryptedStoragePath = Path.Combine(storage.NotebooksDirectory, $"encrypted-{Guid.NewGuid():N}.papernote");
+    await storage.SaveEncryptedAsync(loaded, encryptedStoragePath, "correct horse battery");
+    var encryptedShelfItem = (await storage.ListAsync()).Single(item => item.FilePath == encryptedStoragePath);
+    Assert(encryptedShelfItem.IsEncrypted && encryptedShelfItem.PageCount == loaded.Pages.Count && encryptedShelfItem.Document.Title == loaded.Title, "加密笔记本应继续显示在书架并保留页数");
+    try { _ = await storage.LoadAsync(encryptedStoragePath); Assert(false, "普通打开流程不应读取加密正文"); }
+    catch (NotebookPasswordRequiredException) { }
+    Assert((await storage.LoadEncryptedAsync(encryptedStoragePath, "correct horse battery")).Id == loaded.Id, "密码打开流程应读取加密正文");
+    try { await storage.SaveAsync(loaded, encryptedStoragePath); Assert(false, "普通保存不应意外覆盖加密文件"); }
+    catch (NotebookPasswordRequiredException) { }
+    loaded.Title = "加密自动保存测试";
+    await storage.SaveEncryptedAsync(loaded, encryptedStoragePath, "correct horse battery");
+    Assert((await storage.LoadEncryptedAsync(encryptedStoragePath, "correct horse battery")).Title == "加密自动保存测试", "加密原子保存后应可重新解锁");
+    var encryptedBackup = await storage.CreateBackupAsync(encryptedStoragePath);
+    loaded.Title = "恢复前的新标题";
+    await storage.SaveEncryptedAsync(loaded, encryptedStoragePath, "correct horse battery");
+    var beforeFailedRestore = await File.ReadAllBytesAsync(encryptedStoragePath);
+    try { _ = await storage.RestoreEncryptedBackupAsync(encryptedStoragePath, encryptedBackup.FilePath, "definitely wrong password"); Assert(false, "错误密码不应恢复加密历史版本"); }
+    catch (UnauthorizedAccessException) { }
+    var afterFailedRestore = await File.ReadAllBytesAsync(encryptedStoragePath);
+    Assert(beforeFailedRestore.SequenceEqual(afterFailedRestore), "历史版本验证失败时不得替换当前文件");
+    var encryptedRestored = await storage.RestoreEncryptedBackupAsync(encryptedStoragePath, encryptedBackup.FilePath, "correct horse battery");
+    Assert(encryptedRestored.Title == "加密自动保存测试", "加密历史版本应在验证密码后恢复");
+    await storage.MoveEncryptedToTrashAsync(encryptedStoragePath, "correct horse battery");
+    Assert((await storage.ListAsync()).Single(item => item.FilePath == encryptedStoragePath).Document.IsInTrash, "加密笔记本应可移入回收站");
+    await storage.RestoreEncryptedAsync(encryptedStoragePath, "correct horse battery");
+    Assert(!(await storage.ListAsync()).Single(item => item.FilePath == encryptedStoragePath).Document.IsInTrash, "加密笔记本应可恢复到书架");
+    await storage.RemoveEncryptionAsync(encryptedRestored, encryptedStoragePath);
+    Assert(!await storage.IsEncryptedAsync(encryptedStoragePath) && (await storage.LoadAsync(encryptedStoragePath)).Title == encryptedRestored.Title, "关闭保护后应写回普通 JSON 文件");
+
+    var legacyEncrypted = CreateLegacyEncryptedEnvelope(loaded, "legacy password value");
+    Assert(NotebookEncryptionService.IsEncrypted(legacyEncrypted) && encryption.Decrypt(legacyEncrypted, "legacy password value").Id == loaded.Id, "旧 PNENC1 文件应继续兼容");
     var digest = DocumentIntegrityService.ComputeSha256(encrypted);
     var invalidDigest = digest[..^1] + (digest[^1] == '0' ? "1" : "0");
     Assert(DocumentIntegrityService.Verify(encrypted, digest) && !DocumentIntegrityService.Verify(encrypted, invalidDigest), "内容哈希应可校验");
@@ -785,6 +831,28 @@ static byte[] CreatePdfContentFixture()
         WriteAscii(output, $"{offsets[number]:D10} 00000 n \n");
     WriteAscii(output, $"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xrefOffset}\n%%EOF\n");
     return output.ToArray();
+}
+
+static byte[] CreateLegacyEncryptedEnvelope(NotebookDocument document, string password)
+{
+    var magic = Encoding.ASCII.GetBytes("PNENC1");
+    var salt = RandomNumberGenerator.GetBytes(16);
+    var nonce = RandomNumberGenerator.GetBytes(12);
+    var key = Rfc2898DeriveBytes.Pbkdf2(password, salt, 210_000, HashAlgorithmName.SHA256, 32);
+    var plain = JsonSerializer.SerializeToUtf8Bytes(document);
+    var cipher = new byte[plain.Length];
+    var tag = new byte[16];
+    try
+    {
+        using var aes = new AesGcm(key, 16);
+        aes.Encrypt(nonce, plain, cipher, tag, magic);
+        return [.. magic, .. salt, .. nonce, .. tag, .. cipher];
+    }
+    finally
+    {
+        CryptographicOperations.ZeroMemory(key);
+        CryptographicOperations.ZeroMemory(plain);
+    }
 }
 
 static byte[] CreatePcm16Wave(IReadOnlyList<short> samples, int sampleRate)

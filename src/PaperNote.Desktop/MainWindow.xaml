@@ -352,6 +352,7 @@
                         <Button x:Name="ImportPdfButton" Style="{StaticResource ToolbarButtonStyle}" Click="ImportPdf_Click" ToolTip="把多页 PDF 导入为可书写批注的页面">导入 PDF</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="SaveNow_Click" ToolTip="立即保存 (Ctrl+S)">保存</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="NotebookHistory_Click" ToolTip="查看自动备份、创建版本或恢复旧内容">历史版本</Button>
+                        <Button x:Name="NotebookProtectionButton" AutomationProperties.AutomationId="NotebookProtectionButton" Style="{StaticResource ToolbarButtonStyle}" Click="NotebookProtection_Click" ToolTip="启用、更改或关闭本地密码保护">密码保护</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Click="ExportInk_Click" ToolTip="导出当前页可编辑笔迹">导出笔迹</Button>
                         <Button x:Name="ExportPdfButton" Style="{StaticResource ToolbarButtonStyle}" Click="ExportPdf_Click" ToolTip="把整本笔记导出为扁平 PDF">导出 PDF</Button>
                             <Button x:Name="AudioTimelineButton" Style="{StaticResource ToolbarButtonStyle}" Click="AudioActions_Click" ToolTip="本页录音与时间标记">录音</Button>

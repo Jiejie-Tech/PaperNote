@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using Microsoft.Extensions.DependencyInjection;
+using PaperNote.Core.Services;
 using PaperNote.Mobile.Models;
 using PaperNote.Mobile.Services;
 
@@ -121,7 +122,22 @@ public sealed class LibraryPage : ContentPage
         {
             var file = await _transfer.PickNotebookAsync();
             if (file is null) return;
-            await _repository.ImportNotebookAsync(file);
+            string? password = null;
+            await using (var stream = await file.OpenReadAsync())
+            {
+                var header = new byte[6];
+                var read = await stream.ReadAsync(header);
+                if (read == header.Length && NotebookEncryptionService.IsEncrypted(header))
+                {
+                    password = await PasswordPromptPage.ShowAsync(
+                        Navigation,
+                        "打开加密笔记本",
+                        "输入这个笔记本的本地密码。密码只在本次应用运行期间保留，不会写入文件或设置。",
+                        confirmPassword: false);
+                    if (password is null) return;
+                }
+            }
+            await _repository.ImportNotebookAsync(file, password);
             await OpenEditorAsync();
         }
         catch (Exception exception) { await ShowErrorAsync("导入失败", exception); }
@@ -172,7 +188,17 @@ public sealed class LibraryPage : ContentPage
         _collection.SelectedItem = null;
         try
         {
-            await _repository.OpenAsync(card.Stored);
+            string? password = null;
+            if (card.Stored.IsEncrypted)
+            {
+                password = await PasswordPromptPage.ShowAsync(
+                    Navigation,
+                    "解锁笔记本",
+                    $"输入“{card.Stored.Document.Title}”的本地密码。连续输错不会修改或删除原文件。",
+                    confirmPassword: false);
+                if (password is null) return;
+            }
+            await _repository.OpenAsync(card.Stored, password);
             await OpenEditorAsync();
         }
         catch (Exception exception) { await ShowErrorAsync("打开失败", exception); }

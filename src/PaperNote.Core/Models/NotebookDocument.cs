@@ -128,6 +128,8 @@ public sealed class StoredNotebook
 {
     public required string FilePath { get; init; }
     public required NotebookDocument Document { get; init; }
+    public int PageCount { get; init; }
+    public bool IsEncrypted { get; init; }
 }
 
 public static class PageObjectDefaults

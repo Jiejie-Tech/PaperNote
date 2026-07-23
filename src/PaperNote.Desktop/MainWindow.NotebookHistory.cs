@@ -105,7 +105,31 @@ public partial class MainWindow
             if (selectedForRestore is null) return;
 
             SaveStateText.Text = "正在恢复…";
-            await _notebookStorage.RestoreBackupAsync(notebookPath, selectedForRestore.FilePath);
+            if (_currentNotebookPassword is not null)
+            {
+                try
+                {
+                    await _notebookStorage.RestoreProtectedBackupAsync(notebookPath, selectedForRestore.FilePath, _currentNotebookPassword, _currentNotebookPassword);
+                }
+                catch (UnauthorizedAccessException) when (selectedForRestore.IsEncrypted)
+                {
+                    var backupPassword = PromptForNotebookPassword("旧版本密码", "这个历史版本可能由旧密码加密。请输入该版本保存时使用的密码。", confirmPassword: false);
+                    if (backupPassword is null) return;
+                    await _notebookStorage.RestoreProtectedBackupAsync(notebookPath, selectedForRestore.FilePath, backupPassword, _currentNotebookPassword);
+                }
+            }
+            else if (selectedForRestore.IsEncrypted)
+            {
+                var backupPassword = PromptForNotebookPassword("恢复加密历史版本", "请输入这个历史版本保存时使用的密码。恢复后会继续保持密码保护。", confirmPassword: false);
+                if (backupPassword is null) return;
+                await _notebookStorage.RestoreProtectedBackupAsync(notebookPath, selectedForRestore.FilePath, backupPassword, backupPassword);
+                _currentNotebookPassword = backupPassword;
+                UpdateNotebookProtectionButton();
+            }
+            else
+            {
+                await _notebookStorage.RestoreBackupAsync(notebookPath, selectedForRestore.FilePath);
+            }
             _isDirty = false;
             await OpenNotebookAsync(notebookPath);
             await RefreshLibraryAsync();

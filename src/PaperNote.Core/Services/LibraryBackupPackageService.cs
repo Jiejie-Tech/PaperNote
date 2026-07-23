@@ -408,6 +408,13 @@ public sealed class LibraryBackupPackageService
 
     private void ValidateNotebookBytes(byte[] bytes, string label)
     {
+        if (NotebookEncryptionService.IsEncrypted(bytes))
+        {
+            if (bytes.Length <= 6 + 16 + 12 + 16)
+                throw new InvalidDataException($"{label} 的加密内容不完整。");
+            return;
+        }
+
         try
         {
             var document = JsonSerializer.Deserialize<NotebookDocument>(bytes, _jsonOptions) ?? throw new InvalidDataException($"{label} 内容为空。");

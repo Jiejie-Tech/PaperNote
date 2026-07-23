@@ -34,6 +34,7 @@ public partial class MainWindow : Window
     private NotebookDocument? _currentNotebook;
     private NotebookPage? _currentPage;
     private string? _currentNotebookPath;
+    private string? _currentNotebookPassword;
     private Color _currentColor = (Color)ColorConverter.ConvertFromString("#202124");
     private Color _penColor = (Color)ColorConverter.ConvertFromString("#202124");
     private Color _highlighterColor = (Color)ColorConverter.ConvertFromString("#F4C542");
@@ -211,8 +212,8 @@ public partial class MainWindow : Window
             _notebookCards.Add(new NotebookCardViewModel
             {
                 FilePath = stored.FilePath,
-                Title = document.Title,
-                PageCountText = $"{document.Pages.Count} 页",
+                Title = stored.IsEncrypted ? $"🔒 {document.Title}" : document.Title,
+                PageCountText = $"{Math.Max(1, stored.PageCount)} 页",
                 ModifiedText = document.IsInTrash && document.TrashedAt is not null
                     ? $"移除于 {document.TrashedAt.Value.LocalDateTime:yyyy-MM-dd HH:mm}"
                     : (_librarySort == "Opened" || _selectedLibraryFilter == "recent") && openedText.Length > 0
@@ -291,7 +292,27 @@ public partial class MainWindow : Window
         {
             if (_isDirty) await SaveNotebookAsync();
             SaveStateText.Text = "正在打开…";
-            var document = await _notebookStorage.LoadAsync(filePath);
+            var stored = _storedNotebooks.FirstOrDefault(item => string.Equals(item.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            var encrypted = stored?.IsEncrypted ?? await _notebookStorage.IsEncryptedAsync(filePath);
+            string? password = null;
+            NotebookDocument document;
+            if (encrypted)
+            {
+                password = string.Equals(_currentNotebookPath, filePath, StringComparison.OrdinalIgnoreCase)
+                    ? _currentNotebookPassword
+                    : null;
+                password ??= PromptForNotebookPassword("解锁笔记本", $"请输入“{stored?.Document.Title ?? "加密笔记本"}”的密码。", confirmPassword: false);
+                if (password is null)
+                {
+                    SaveStateText.Text = _isDirty ? "未保存" : "已保存";
+                    return;
+                }
+                document = await _notebookStorage.LoadEncryptedAsync(filePath, password);
+            }
+            else
+            {
+                document = await _notebookStorage.LoadAsync(filePath);
+            }
             if (document.IsInTrash) throw new InvalidOperationException("请先从回收站恢复这个笔记本。");
             ClearPageThumbnailCache();
             PageOverviewOverlay.Visibility = Visibility.Collapsed;
@@ -306,6 +327,8 @@ public partial class MainWindow : Window
             PageOverviewBookmarkedOnlyToggle.IsChecked = false;
             _currentNotebook = document;
             _currentNotebookPath = filePath;
+            _currentNotebookPassword = encrypted ? password : null;
+            UpdateNotebookProtectionButton();
             document.LastOpenedAt = DateTimeOffset.Now;
             NotebookTitleBox.Text = document.Title;
             NotebookFolderCombo.Text = document.FolderName;
@@ -369,10 +392,21 @@ public partial class MainWindow : Window
         if (result != MessageBoxResult.Yes) return;
         try
         {
-            await _notebookStorage.MoveToTrashAsync(filePath);
+            var stored = _storedNotebooks.FirstOrDefault(item => string.Equals(item.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            if (stored?.IsEncrypted == true)
+            {
+                var password = GetSessionOrPromptPassword(filePath, "移到回收站", "请输入密码后再移动这个加密笔记本。");
+                if (password is null) return;
+                await _notebookStorage.MoveEncryptedToTrashAsync(filePath, password);
+            }
+            else
+            {
+                await _notebookStorage.MoveToTrashAsync(filePath);
+            }
             if (string.Equals(_currentNotebookPath, filePath, StringComparison.OrdinalIgnoreCase))
             {
-                _currentNotebook = null; _currentPage = null; _currentNotebookPath = null; _isDirty = false;
+                _currentNotebook = null; _currentPage = null; _currentNotebookPath = null; _currentNotebookPassword = null; _isDirty = false;
+                UpdateNotebookProtectionButton();
             }
             RemoveNotebookTab(filePath);
             await RefreshLibraryAsync();
@@ -390,7 +424,17 @@ public partial class MainWindow : Window
         if (sender is not Button { Tag: string filePath }) return;
         try
         {
-            await _notebookStorage.RestoreAsync(filePath);
+            var stored = _storedNotebooks.FirstOrDefault(item => string.Equals(item.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            if (stored?.IsEncrypted == true)
+            {
+                var password = GetSessionOrPromptPassword(filePath, "恢复加密笔记本", "请输入密码后再恢复到书架。");
+                if (password is null) return;
+                await _notebookStorage.RestoreEncryptedAsync(filePath, password);
+            }
+            else
+            {
+                await _notebookStorage.RestoreAsync(filePath);
+            }
             await RefreshLibraryAsync();
             LibraryStatusText.Text = "笔记本已恢复到书架";
         }
@@ -835,7 +879,10 @@ public partial class MainWindow : Window
             try
             {
                 SaveStateText.Text = "正在保存…";
-                await _notebookStorage.SaveAsync(_currentNotebook, _currentNotebookPath);
+                if (_currentNotebookPassword is not null)
+                    await _notebookStorage.SaveEncryptedAsync(_currentNotebook, _currentNotebookPath, _currentNotebookPassword);
+                else
+                    await _notebookStorage.SaveAsync(_currentNotebook, _currentNotebookPath);
                 if (_revision == savingRevision)
                 {
                     _isDirty = false;

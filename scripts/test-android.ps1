@@ -67,7 +67,17 @@ $sourceAssertions=@(
   @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='查看波形并跳转';Label='waveform jump menu'},
   @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='导出选区为 PNG';Label='selection PNG menu'},
   @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='_canvas.PlaybackStrokeId = null';Label='playback highlight cleanup'},
-  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='StopAudioPlayback();';Label='audio lifecycle cleanup'}
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='StopAudioPlayback();';Label='audio lifecycle cleanup'},
+  @{Path='src\PaperNote.Mobile\Pages\PasswordPromptPage.cs';Pattern='NotebookPasswordEntry';Label='password entry automation id'},
+  @{Path='src\PaperNote.Mobile\Pages\PasswordPromptPage.cs';Pattern='NotebookPasswordConfirmationEntry';Label='password confirmation automation id'},
+  @{Path='src\PaperNote.Mobile\Pages\PasswordPromptPage.cs';Pattern='NotebookPasswordConfirmButton';Label='password confirm automation id'},
+  @{Path='src\PaperNote.Mobile\Services\MobileNotebookRepository.cs';Pattern='EnableEncryptionAsync';Label='enable notebook encryption'},
+  @{Path='src\PaperNote.Mobile\Services\MobileNotebookRepository.cs';Pattern='ChangeEncryptionPasswordAsync';Label='change notebook password'},
+  @{Path='src\PaperNote.Mobile\Services\MobileNotebookRepository.cs';Pattern='DisableEncryptionAsync';Label='disable notebook encryption'},
+  @{Path='src\PaperNote.Mobile\Services\MobileNotebookRepository.cs';Pattern='SaveEncryptedAsync';Label='encrypted autosave'},
+  @{Path='src\PaperNote.Mobile\Services\MobileNotebookRepository.cs';Pattern='LoadEncryptedAsync';Label='encrypted notebook unlock'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='启用密码保护';Label='password protection menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='管理密码保护';Label='password management menu'}
 )
 foreach($assertion in $sourceAssertions){
   $path=Join-Path $environment.RepoRoot $assertion.Path

@@ -77,6 +77,14 @@ internal static class Program
             });
 
             window = new MainWindow();
+            Assert(window.FindName("NotebookProtectionButton") is Button, "The editor should expose notebook password protection.");
+            SetField(window, "_currentNotebookPassword", "background test password");
+            Invoke(window, "UpdateNotebookProtectionButton");
+            Assert(((Button)window.FindName("NotebookProtectionButton")).Content?.ToString()?.Contains("已保护", StringComparison.Ordinal) == true, "Protected notebook state should be visible without opening a dialog.");
+            SetField(window, "_currentNotebookPassword", null);
+            Invoke(window, "UpdateNotebookProtectionButton");
+            Assert(window.GetType().GetMethod("NotebookProtection_Click", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Password protection handler should exist.");
+            Assert(window.GetType().GetMethod("PromptForNotebookPassword", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Password prompt should use the hidden WPF security window.");
             SetField(window, "_currentNotebook", document);
             SetField(window, "_currentPage", page);
             Invoke(window, "LoadPage", page);

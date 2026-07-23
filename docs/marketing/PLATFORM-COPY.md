@@ -120,7 +120,7 @@ Local-first handwriting and PDF study app for Windows and Android, with offline 
 - 尚未包含真正的离线 OCR、手写转文字、数学/LaTeX 识别、完整标尺和更高级的几何构造工具。
 - 录音已包含本地波形、分段跳转和播放笔迹高亮；麦克风设备选择、质量设置及点击笔迹反向跳转仍待完善。
 - PDF 可编辑表单、数字签名、测量、合并多个源 PDF、双页阅读和分屏仍未实现；200 MB/500 页边界仍需更多低内存 Android 真机长期压力验证。
-- 完整屏幕阅读器语义、高对比度专项适配、笔记级加密设置和本地插件机制仍待完善。
+- 完整屏幕阅读器语义、高对比度专项适配和本地插件机制仍待完善；笔记级本地密码保护已完成。
 - 账号、云同步、联网 AI、遥测、广告和多人协作不在离线版本范围内。
 - APK、ZIP、签名密钥、构建输出和私人笔记属于发布产物或本地数据，不提交到源码仓库。
 
@@ -132,3 +132,8 @@ Local-first handwriting and PDF study app for Windows and Android, with offline 
 .\scripts\build-android.ps1
 .\scripts\test-android.ps1 -SkipBuild -SkipUi
 ```
+
+
+## 可用于平台介绍的密码保护文案
+
+**单本笔记本地密码保护**：Windows 与 Android 共用离线加密格式，可为重要笔记设置密码；页面、笔迹、PDF 内容和录音信息加密保存在本机，自动保存、历史版本与整库备份会保持保护状态。密码不会上传或保存，忘记后无法找回。

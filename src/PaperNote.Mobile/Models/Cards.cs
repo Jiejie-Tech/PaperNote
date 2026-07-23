@@ -3,8 +3,8 @@
 public sealed class NotebookCard
 {
     public required PaperNote.Core.Models.StoredNotebook Stored { get; init; }
-    public string Title => Stored.Document.Title;
-    public string Detail => $"{Stored.Document.Pages.Count} 页 · {Stored.Document.ModifiedAt.LocalDateTime:MM-dd HH:mm}";
+    public string Title => Stored.IsEncrypted ? $"🔒 {Stored.Document.Title}" : Stored.Document.Title;
+    public string Detail => $"{Math.Max(1, Stored.PageCount)} 页 · {Stored.Document.ModifiedAt.LocalDateTime:MM-dd HH:mm}" + (Stored.IsEncrypted ? " · 本地加密" : string.Empty);
     public string Folder => string.IsNullOrWhiteSpace(Stored.Document.FolderName) ? "未分类" : Stored.Document.FolderName;
     public string CoverColor => Stored.Document.CoverStyle switch
     {

@@ -13,6 +13,7 @@ public sealed partial class NotebookStorageService
         WriteIndented = true
     };
     private readonly NotebookBackupService _backupService;
+    private readonly NotebookEncryptionService _encryptionService = new();
 
     public NotebookStorageService(string? notebooksDirectory = null, string? backupsDirectory = null)
     {
@@ -34,8 +35,29 @@ public sealed partial class NotebookStorageService
         {
             try
             {
-                var document = await LoadAsync(filePath, cancellationToken);
-                notebooks.Add(new StoredNotebook { FilePath = filePath, Document = document });
+                var bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
+                if (NotebookEncryptionService.IsEncrypted(bytes))
+                {
+                    var metadata = _encryptionService.TryReadMetadata(bytes, out var parsed)
+                        ? parsed
+                        : CreateFallbackEncryptionMetadata(filePath);
+                    notebooks.Add(new StoredNotebook
+                    {
+                        FilePath = filePath,
+                        Document = metadata.CreateLockedPlaceholder(),
+                        PageCount = metadata.PageCount,
+                        IsEncrypted = true
+                    });
+                    continue;
+                }
+
+                var document = DeserializeDocument(bytes);
+                notebooks.Add(new StoredNotebook
+                {
+                    FilePath = filePath,
+                    Document = document,
+                    PageCount = document.Pages.Count
+                });
             }
             catch
             {
@@ -56,27 +78,66 @@ public sealed partial class NotebookStorageService
         var safeTitle = MakeSafeFileName(document.Title);
         var filePath = Path.Combine(NotebooksDirectory, $"{safeTitle}-{document.Id:N}.papernote");
         await SaveAsync(document, filePath, cancellationToken);
-        return new StoredNotebook { FilePath = filePath, Document = document };
+        return new StoredNotebook { FilePath = filePath, Document = document, PageCount = document.Pages.Count };
     }
 
     public async Task<NotebookDocument> LoadAsync(string filePath, CancellationToken cancellationToken = default)
     {
         EnsurePathIsInNotebookDirectory(filePath, allowMissing: false);
-        var json = await File.ReadAllTextAsync(filePath, cancellationToken);
-        var document = JsonSerializer.Deserialize<NotebookDocument>(json, _jsonOptions)
-            ?? throw new InvalidDataException("笔记本文件内容为空。");
+        var bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
+        if (NotebookEncryptionService.IsEncrypted(bytes))
+            throw new NotebookPasswordRequiredException(filePath);
+        return DeserializeDocument(bytes);
+    }
 
+    public async Task<NotebookDocument> LoadEncryptedAsync(string filePath, string password, CancellationToken cancellationToken = default)
+    {
+        EnsurePathIsInNotebookDirectory(filePath, allowMissing: false);
+        var bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
+        if (!NotebookEncryptionService.IsEncrypted(bytes)) return DeserializeDocument(bytes);
+        var document = _encryptionService.Decrypt(bytes, password);
         NormalizeDocument(document);
         return document;
     }
 
-    public async Task SaveAsync(NotebookDocument document, string filePath, CancellationToken cancellationToken = default)
+    public async Task<bool> IsEncryptedAsync(string filePath, CancellationToken cancellationToken = default)
+    {
+        EnsurePathIsInNotebookDirectory(filePath, allowMissing: false);
+        var bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
+        return NotebookEncryptionService.IsEncrypted(bytes);
+    }
+
+    public Task SaveAsync(NotebookDocument document, string filePath, CancellationToken cancellationToken = default)
+        => SaveCoreAsync(document, filePath, password: null, encrypt: false, allowReplaceEncrypted: false, cancellationToken);
+
+    public Task SaveEncryptedAsync(NotebookDocument document, string filePath, string password, CancellationToken cancellationToken = default)
+        => SaveCoreAsync(document, filePath, password, encrypt: true, allowReplaceEncrypted: true, cancellationToken);
+
+    public Task RemoveEncryptionAsync(NotebookDocument document, string filePath, CancellationToken cancellationToken = default)
+        => SaveCoreAsync(document, filePath, password: null, encrypt: false, allowReplaceEncrypted: true, cancellationToken);
+
+    private async Task SaveCoreAsync(
+        NotebookDocument document,
+        string filePath,
+        string? password,
+        bool encrypt,
+        bool allowReplaceEncrypted,
+        CancellationToken cancellationToken)
     {
         EnsurePathIsInNotebookDirectory(filePath, allowMissing: true);
+        if (!encrypt && !allowReplaceEncrypted && File.Exists(filePath))
+        {
+            var currentBytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
+            if (NotebookEncryptionService.IsEncrypted(currentBytes))
+                throw new NotebookPasswordRequiredException(filePath);
+        }
+
         NormalizeDocument(document);
         document.FormatVersion = Math.Max(document.FormatVersion, 17);
         document.ModifiedAt = DateTimeOffset.Now;
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(document, _jsonOptions);
+        var bytes = encrypt
+            ? _encryptionService.Encrypt(document, password ?? throw new ArgumentNullException(nameof(password)))
+            : JsonSerializer.SerializeToUtf8Bytes(document, _jsonOptions);
         var directory = Path.GetDirectoryName(filePath)
             ?? throw new InvalidOperationException("无法确定笔记本保存目录。");
 
@@ -87,16 +148,41 @@ public sealed partial class NotebookStorageService
         {
             await File.WriteAllBytesAsync(temporaryPath, bytes, cancellationToken);
             var persisted = await File.ReadAllBytesAsync(temporaryPath, cancellationToken);
-            var verified = JsonSerializer.Deserialize<NotebookDocument>(persisted, _jsonOptions)
-                ?? throw new InvalidDataException("\u4e34\u65f6\u4fdd\u5b58\u6587\u4ef6\u9a8c\u8bc1\u5931\u8d25\uff1a\u5185\u5bb9\u4e3a\u7a7a\u3002");
+            var verified = encrypt
+                ? _encryptionService.Decrypt(persisted, password!)
+                : DeserializeDocument(persisted);
             if (verified.Id != document.Id || verified.Pages is null)
-                throw new InvalidDataException("\u4e34\u65f6\u4fdd\u5b58\u6587\u4ef6\u9a8c\u8bc1\u5931\u8d25\uff1a\u6587\u6863\u6807\u8bc6\u6216\u9875\u9762\u6570\u636e\u4e0d\u5b8c\u6574\u3002");
+                throw new InvalidDataException("临时保存文件验证失败：文档标识或页面数据不完整。");
             File.Move(temporaryPath, filePath, overwrite: true);
         }
         finally
         {
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
         }
+    }
+
+    private NotebookDocument DeserializeDocument(ReadOnlySpan<byte> bytes)
+    {
+        var document = JsonSerializer.Deserialize<NotebookDocument>(bytes, _jsonOptions)
+            ?? throw new InvalidDataException("笔记本文件内容为空。");
+        NormalizeDocument(document);
+        return document;
+    }
+
+    private static NotebookEncryptionMetadata CreateFallbackEncryptionMetadata(string filePath)
+    {
+        var fileName = Path.GetFileNameWithoutExtension(filePath);
+        var id = Guid.Empty;
+        var separator = fileName.LastIndexOf('-');
+        if (separator >= 0 && Guid.TryParseExact(fileName[(separator + 1)..], "N", out var parsed)) id = parsed;
+        var title = separator > 0 ? fileName[..separator] : fileName;
+        return new NotebookEncryptionMetadata
+        {
+            Id = id == Guid.Empty ? Guid.NewGuid() : id,
+            Title = string.IsNullOrWhiteSpace(title) ? "加密笔记本" : title,
+            ModifiedAt = File.GetLastWriteTimeUtc(filePath),
+            PageCount = 1
+        };
     }
 
     public Task<IReadOnlyList<NotebookBackupInfo>> ListBackupsAsync(string filePath, CancellationToken cancellationToken = default)
@@ -111,8 +197,39 @@ public sealed partial class NotebookStorageService
 
     public async Task<NotebookDocument> RestoreBackupAsync(string filePath, string backupPath, CancellationToken cancellationToken = default)
     {
-        await _backupService.RestoreAsync(filePath, backupPath, cancellationToken);
+        await _backupService.RestoreAsync(filePath, backupPath, cancellationToken, (bytes, validationToken) =>
+        {
+            if (NotebookEncryptionService.IsEncrypted(bytes))
+                throw new InvalidDataException("所选历史版本已加密，请输入该版本的密码后恢复。");
+            _ = DeserializeDocument(bytes);
+            return Task.FromResult(bytes);
+        });
         return await LoadAsync(filePath, cancellationToken);
+    }
+
+    public Task<NotebookDocument> RestoreEncryptedBackupAsync(
+        string filePath,
+        string backupPath,
+        string password,
+        CancellationToken cancellationToken = default)
+        => RestoreProtectedBackupAsync(filePath, backupPath, password, password, cancellationToken);
+
+    public async Task<NotebookDocument> RestoreProtectedBackupAsync(
+        string filePath,
+        string backupPath,
+        string backupPassword,
+        string outputPassword,
+        CancellationToken cancellationToken = default)
+    {
+        await _backupService.RestoreAsync(filePath, backupPath, cancellationToken, (bytes, validationToken) =>
+        {
+            var document = NotebookEncryptionService.IsEncrypted(bytes)
+                ? _encryptionService.Decrypt(bytes, backupPassword)
+                : DeserializeDocument(bytes);
+            NormalizeDocument(document);
+            return Task.FromResult(_encryptionService.Encrypt(document, outputPassword));
+        });
+        return await LoadEncryptedAsync(filePath, outputPassword, cancellationToken);
     }
 
     public async Task MoveToTrashAsync(string filePath, CancellationToken cancellationToken = default)
@@ -123,12 +240,28 @@ public sealed partial class NotebookStorageService
         await SaveAsync(document, filePath, cancellationToken);
     }
 
+    public async Task MoveEncryptedToTrashAsync(string filePath, string password, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadEncryptedAsync(filePath, password, cancellationToken);
+        document.IsInTrash = true;
+        document.TrashedAt = DateTimeOffset.Now;
+        await SaveEncryptedAsync(document, filePath, password, cancellationToken);
+    }
+
     public async Task RestoreAsync(string filePath, CancellationToken cancellationToken = default)
     {
         var document = await LoadAsync(filePath, cancellationToken);
         document.IsInTrash = false;
         document.TrashedAt = null;
         await SaveAsync(document, filePath, cancellationToken);
+    }
+
+    public async Task RestoreEncryptedAsync(string filePath, string password, CancellationToken cancellationToken = default)
+    {
+        var document = await LoadEncryptedAsync(filePath, password, cancellationToken);
+        document.IsInTrash = false;
+        document.TrashedAt = null;
+        await SaveEncryptedAsync(document, filePath, password, cancellationToken);
     }
 
     public void PermanentlyDelete(string filePath)

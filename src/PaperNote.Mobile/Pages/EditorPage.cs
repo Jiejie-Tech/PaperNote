@@ -529,7 +529,9 @@ public sealed partial class EditorPage : ContentPage
         }
 
         actions.Add($"套索筛选：{SelectionFilterDisplayName(_canvas.SelectionFilter)}");
-        actions.AddRange(["录音时间轴", "图层", "纸张设置", "适合屏幕", "清空当前页墨迹", "重命名当前页", "添加文字", "添加形状", "复制当前页", "删除当前页", "导出笔记本", "移到回收站"]);
+        actions.AddRange(["录音时间轴", "图层", "纸张设置", "适合屏幕", "清空当前页墨迹", "重命名当前页", "添加文字", "添加形状", "复制当前页", "删除当前页"]);
+        actions.Add(_repository.IsCurrentEncrypted ? "管理密码保护" : "启用密码保护");
+        actions.AddRange(["导出笔记本", "移到回收站"]);
 
         var choice = await DisplayActionSheetAsync("笔记本操作", "取消", null, actions.ToArray());
         switch (choice)
@@ -608,6 +610,8 @@ public sealed partial class EditorPage : ContentPage
                 if (await DisplayAlertAsync("删除页面", "确定删除当前页面吗？", "删除", "取消") && _repository.DeletePage(_page.Id))
                 { RefreshPageCards(); LoadPage(_repository.GetCurrentPage()); ScheduleSave(); }
                 break;
+            case "启用密码保护":
+            case "管理密码保护": await ManageNotebookProtectionAsync(); break;
             case "导出笔记本": await _transfer.ShareNotebookAsync(); break;
             case "移到回收站":
                 if (await DisplayAlertAsync("移到回收站", "笔记本可通过桌面版或备份恢复。", "移除", "取消"))
@@ -615,6 +619,49 @@ public sealed partial class EditorPage : ContentPage
                 break;
         }
         UpdatePageStatus();
+    }
+
+    private async Task ManageNotebookProtectionAsync()
+    {
+        if (_repository.Current is null) return;
+        try
+        {
+            if (!_repository.IsCurrentEncrypted)
+            {
+                var password = await PasswordPromptPage.ShowAsync(
+                    Navigation,
+                    "启用密码保护",
+                    "笔记本将使用 AES-GCM 和 PBKDF2 在本机加密。请牢记密码；PaperNote 不保存密码，也无法代为找回。",
+                    confirmPassword: true);
+                if (password is null) return;
+                await _repository.EnableEncryptionAsync(password);
+                await DisplayAlertAsync("已启用密码保护", "退出笔记本后，下次打开需要输入密码。自动保存和历史备份也会保持加密。", "知道了");
+                return;
+            }
+
+            var choice = await DisplayActionSheetAsync("管理密码保护", "取消", null, "更改密码", "关闭密码保护");
+            if (choice == "更改密码")
+            {
+                var currentPassword = await PasswordPromptPage.ShowAsync(Navigation, "验证当前密码", "先输入当前密码。", confirmPassword: false);
+                if (currentPassword is null) return;
+                var newPassword = await PasswordPromptPage.ShowAsync(Navigation, "设置新密码", "新密码至少 8 个字符，并需要输入两次确认。", confirmPassword: true);
+                if (newPassword is null) return;
+                await _repository.ChangeEncryptionPasswordAsync(currentPassword, newPassword);
+                await DisplayAlertAsync("密码已更改", "后续自动保存和备份将使用新密码。", "知道了");
+            }
+            else if (choice == "关闭密码保护")
+            {
+                var password = await PasswordPromptPage.ShowAsync(Navigation, "关闭密码保护", "输入当前密码后，笔记本会改回普通本地文件。", confirmPassword: false);
+                if (password is null) return;
+                if (!await DisplayAlertAsync("确认关闭保护", "关闭后，能访问本机文件的人可以直接读取笔记内容。", "关闭保护", "取消")) return;
+                await _repository.DisableEncryptionAsync(password);
+                await DisplayAlertAsync("已关闭密码保护", "笔记本已改回普通本地文件。", "知道了");
+            }
+        }
+        catch (Exception exception)
+        {
+            await DisplayAlertAsync("密码保护操作失败", exception.Message, "知道了");
+        }
     }
 
     private async Task ChooseSelectionFilterAsync()

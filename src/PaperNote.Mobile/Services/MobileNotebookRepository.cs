@@ -6,6 +6,7 @@ namespace PaperNote.Mobile.Services;
 public sealed class MobileNotebookRepository
 {
     private readonly SemaphoreSlim _saveGate = new(1, 1);
+    private string? _currentPassword;
 
     public MobileNotebookRepository()
     {
@@ -22,6 +23,7 @@ public sealed class MobileNotebookRepository
     public StoredNotebook? Current { get; private set; }
     public IReadOnlyList<NotebookRecoveryResult> LastRecoveryResults { get; private set; } = [];
     public IReadOnlyList<NotebookRecoveryCandidate> RecoveryCandidates { get; private set; } = [];
+    public bool IsCurrentEncrypted => !string.IsNullOrEmpty(_currentPassword);
 
     public event EventHandler? LibraryChanged;
     public event EventHandler? CurrentChanged;
@@ -43,17 +45,27 @@ public sealed class MobileNotebookRepository
     {
         var document = NotebookDocument.Create(string.IsNullOrWhiteSpace(title) ? $"新笔记 {DateTime.Now:MM-dd}" : title.Trim());
         var stored = await Storage.CreateAsync(document, cancellationToken);
+        _currentPassword = null;
         Current = stored;
         await RefreshAsync(cancellationToken: cancellationToken);
         CurrentChanged?.Invoke(this, EventArgs.Empty);
         return stored;
     }
 
-    public async Task OpenAsync(StoredNotebook stored, CancellationToken cancellationToken = default)
+    public async Task OpenAsync(StoredNotebook stored, string? password = null, CancellationToken cancellationToken = default)
     {
-        var document = await Storage.LoadAsync(stored.FilePath, cancellationToken);
+        var document = stored.IsEncrypted
+            ? await Storage.LoadEncryptedAsync(stored.FilePath, password ?? throw new NotebookPasswordRequiredException(stored.FilePath), cancellationToken)
+            : await Storage.LoadAsync(stored.FilePath, cancellationToken);
         document.LastOpenedAt = DateTimeOffset.Now;
-        Current = new StoredNotebook { FilePath = stored.FilePath, Document = document };
+        _currentPassword = stored.IsEncrypted ? password : null;
+        Current = new StoredNotebook
+        {
+            FilePath = stored.FilePath,
+            Document = document,
+            PageCount = document.Pages.Count,
+            IsEncrypted = stored.IsEncrypted
+        };
         await SaveCurrentAsync(cancellationToken);
         CurrentChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -66,7 +78,10 @@ public sealed class MobileNotebookRepository
         await _saveGate.WaitAsync(cancellationToken);
         try
         {
-            await Storage.SaveAsync(current.Document, current.FilePath, cancellationToken);
+            if (IsCurrentEncrypted)
+                await Storage.SaveEncryptedAsync(current.Document, current.FilePath, _currentPassword!, cancellationToken);
+            else
+                await Storage.SaveAsync(current.Document, current.FilePath, cancellationToken);
         }
         finally
         {
@@ -115,7 +130,7 @@ public sealed class MobileNotebookRepository
         return deleted;
     }
 
-    public async Task<StoredNotebook> ImportNotebookAsync(FileResult file, CancellationToken cancellationToken = default)
+    public async Task<StoredNotebook> ImportNotebookAsync(FileResult file, string? password = null, CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(Storage.NotebooksDirectory);
         var importedPath = Path.Combine(Storage.NotebooksDirectory, $"import-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.papernote");
@@ -125,15 +140,26 @@ public sealed class MobileNotebookRepository
 
         try
         {
-            var document = await Storage.LoadAsync(importedPath, cancellationToken);
+            var encrypted = await Storage.IsEncryptedAsync(importedPath, cancellationToken);
+            var document = encrypted
+                ? await Storage.LoadEncryptedAsync(importedPath, password ?? throw new NotebookPasswordRequiredException(importedPath), cancellationToken)
+                : await Storage.LoadAsync(importedPath, cancellationToken);
             var duplicateId = (await Storage.ListAsync(cancellationToken))
                 .Any(item => !string.Equals(item.FilePath, importedPath, StringComparison.OrdinalIgnoreCase) && item.Document.Id == document.Id);
             if (duplicateId)
             {
                 document.Id = Guid.NewGuid();
-                await Storage.SaveAsync(document, importedPath, cancellationToken);
+                if (encrypted) await Storage.SaveEncryptedAsync(document, importedPath, password!, cancellationToken);
+                else await Storage.SaveAsync(document, importedPath, cancellationToken);
             }
-            Current = new StoredNotebook { FilePath = importedPath, Document = document };
+            _currentPassword = encrypted ? password : null;
+            Current = new StoredNotebook
+            {
+                FilePath = importedPath,
+                Document = document,
+                PageCount = document.Pages.Count,
+                IsEncrypted = encrypted
+            };
             await RefreshAsync(cancellationToken: cancellationToken);
             CurrentChanged?.Invoke(this, EventArgs.Empty);
             return Current;
@@ -145,12 +171,81 @@ public sealed class MobileNotebookRepository
         }
     }
 
+    public async Task EnableEncryptionAsync(string password, CancellationToken cancellationToken = default)
+    {
+        var current = Current ?? throw new InvalidOperationException("尚未打开笔记本。");
+        await _saveGate.WaitAsync(cancellationToken);
+        try
+        {
+            await Storage.SaveEncryptedAsync(current.Document, current.FilePath, password, cancellationToken);
+            _currentPassword = password;
+            Current = new StoredNotebook
+            {
+                FilePath = current.FilePath,
+                Document = current.Document,
+                PageCount = current.Document.Pages.Count,
+                IsEncrypted = true
+            };
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+        CurrentChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public async Task ChangeEncryptionPasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken = default)
+    {
+        var current = Current ?? throw new InvalidOperationException("尚未打开笔记本。");
+        await _saveGate.WaitAsync(cancellationToken);
+        try
+        {
+            _ = await Storage.LoadEncryptedAsync(current.FilePath, currentPassword, cancellationToken);
+            await Storage.SaveEncryptedAsync(current.Document, current.FilePath, newPassword, cancellationToken);
+            _currentPassword = newPassword;
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+        CurrentChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public async Task DisableEncryptionAsync(string password, CancellationToken cancellationToken = default)
+    {
+        var current = Current ?? throw new InvalidOperationException("尚未打开笔记本。");
+        await _saveGate.WaitAsync(cancellationToken);
+        try
+        {
+            _ = await Storage.LoadEncryptedAsync(current.FilePath, password, cancellationToken);
+            await Storage.RemoveEncryptionAsync(current.Document, current.FilePath, cancellationToken);
+            _currentPassword = null;
+            Current = new StoredNotebook
+            {
+                FilePath = current.FilePath,
+                Document = current.Document,
+                PageCount = current.Document.Pages.Count,
+                IsEncrypted = false
+            };
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+        CurrentChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public async Task MoveCurrentToTrashAsync(CancellationToken cancellationToken = default)
     {
         if (Current is null) return;
-        await Storage.MoveToTrashAsync(Current.FilePath, cancellationToken);
+        if (IsCurrentEncrypted)
+            await Storage.MoveEncryptedToTrashAsync(Current.FilePath, _currentPassword!, cancellationToken);
+        else
+            await Storage.MoveToTrashAsync(Current.FilePath, cancellationToken);
         Current = null;
+        _currentPassword = null;
         await RefreshAsync(cancellationToken: cancellationToken);
         CurrentChanged?.Invoke(this, EventArgs.Empty);
     }
+
 }

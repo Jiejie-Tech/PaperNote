@@ -12,6 +12,7 @@ public sealed class NotebookBackupInfo
     public required string Title { get; init; }
     public required int PageCount { get; init; }
     public required string Kind { get; init; }
+    public bool IsEncrypted { get; init; }
 
     public string DisplayText => $"{CreatedAt.LocalDateTime:yyyy-MM-dd HH:mm:ss} · {PageCount} 页 · {Kind}";
 }
@@ -23,6 +24,7 @@ internal sealed class NotebookBackupService
     private readonly string _notebooksDirectory;
     private readonly string _backupsDirectory;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly NotebookEncryptionService _encryptionService = new();
 
     public NotebookBackupService(string notebooksDirectory, string backupsDirectory, JsonSerializerOptions jsonOptions)
     {
@@ -75,14 +77,20 @@ internal sealed class NotebookBackupService
         return result.OrderByDescending(item => item.CreatedAt).ToArray();
     }
 
-    public async Task RestoreAsync(string notebookPath, string backupPath, CancellationToken cancellationToken)
+    public async Task RestoreAsync(
+        string notebookPath,
+        string backupPath,
+        CancellationToken cancellationToken,
+        Func<byte[], CancellationToken, Task<byte[]>>? prepareBackupAsync = null)
     {
         EnsureNotebookPath(notebookPath, allowMissing: false);
         EnsureBackupPath(notebookPath, backupPath);
 
         var backupBytes = await File.ReadAllBytesAsync(backupPath, cancellationToken);
-        _ = JsonSerializer.Deserialize<NotebookDocument>(backupBytes, _jsonOptions)
-            ?? throw new InvalidDataException("历史版本内容为空。");
+        var restoreBytes = prepareBackupAsync is null
+            ? backupBytes
+            : await prepareBackupAsync(backupBytes, cancellationToken);
+        ValidateNotebookPayload(restoreBytes);
 
         var currentBytes = await File.ReadAllBytesAsync(notebookPath, cancellationToken);
         await CreateBackupFromBytesAsync(notebookPath, currentBytes, "before-restore", deduplicate: false, cancellationToken);
@@ -90,7 +98,7 @@ internal sealed class NotebookBackupService
         var temporaryPath = notebookPath + ".restore.tmp";
         try
         {
-            await File.WriteAllBytesAsync(temporaryPath, backupBytes, cancellationToken);
+            await File.WriteAllBytesAsync(temporaryPath, restoreBytes, cancellationToken);
             File.Move(temporaryPath, notebookPath, overwrite: true);
         }
         finally
@@ -109,8 +117,7 @@ internal sealed class NotebookBackupService
     private async Task<string?> CreateBackupFromBytesAsync(string notebookPath, byte[] bytes, string kind, bool deduplicate, CancellationToken cancellationToken)
     {
         if (bytes.Length == 0) return null;
-        _ = JsonSerializer.Deserialize<NotebookDocument>(bytes, _jsonOptions)
-            ?? throw new InvalidDataException("无法备份空白笔记本文件。");
+        ValidateNotebookPayload(bytes);
 
         var directory = GetNotebookBackupDirectory(notebookPath);
         Directory.CreateDirectory(directory);
@@ -149,8 +156,17 @@ internal sealed class NotebookBackupService
         try
         {
             var bytes = await File.ReadAllBytesAsync(backupPath, cancellationToken);
-            var document = JsonSerializer.Deserialize<NotebookDocument>(bytes, _jsonOptions);
-            if (document is null) return null;
+            NotebookDocument? document = null;
+            NotebookEncryptionMetadata? metadata = null;
+            if (NotebookEncryptionService.IsEncrypted(bytes))
+            {
+                _encryptionService.TryReadMetadata(bytes, out metadata);
+            }
+            else
+            {
+                document = JsonSerializer.Deserialize<NotebookDocument>(bytes, _jsonOptions);
+                if (document is null) return null;
+            }
             var fileName = Path.GetFileName(backupPath);
             var kind = fileName.Contains("-before-restore-", StringComparison.OrdinalIgnoreCase)
                 ? "恢复前保护点"
@@ -159,15 +175,32 @@ internal sealed class NotebookBackupService
             {
                 FilePath = backupPath,
                 CreatedAt = File.GetLastWriteTime(backupPath),
-                Title = string.IsNullOrWhiteSpace(document.Title) ? "未命名笔记本" : document.Title,
-                PageCount = document.Pages?.Count ?? 0,
-                Kind = kind
+                Title = metadata is not null
+                    ? (string.IsNullOrWhiteSpace(metadata.Title) ? "加密笔记本" : $"🔒 {metadata.Title}")
+                    : string.IsNullOrWhiteSpace(document!.Title) ? "未命名笔记本" : document.Title,
+                PageCount = metadata?.PageCount ?? document?.Pages?.Count ?? 0,
+                Kind = kind,
+                IsEncrypted = NotebookEncryptionService.IsEncrypted(bytes)
             };
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+
+    private void ValidateNotebookPayload(byte[] bytes)
+    {
+        if (NotebookEncryptionService.IsEncrypted(bytes))
+        {
+            if (bytes.Length <= 6 + 16 + 12 + 16)
+                throw new InvalidDataException("加密笔记本内容不完整。");
+            return;
+        }
+
+        _ = JsonSerializer.Deserialize<NotebookDocument>(bytes, _jsonOptions)
+            ?? throw new InvalidDataException("笔记本内容为空，当前文件未被替换。");
     }
 
     private void TrimBackups(string directory)
