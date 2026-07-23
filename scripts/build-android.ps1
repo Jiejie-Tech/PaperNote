@@ -77,7 +77,7 @@ $requiredMetadata = @(
     "name='com.jiejietech.papernote'",
     "versionCode='$versionCode'",
     "versionName='$version'",
-    "minSdkVersion:'23'",
+    "minSdkVersion:'24'",
     "targetSdkVersion:'36'",
     "application: label='PaperNote' icon='res/mipmap"
 )
@@ -99,7 +99,7 @@ $metadataPath = Join-Path $artifactDirectory "$packageName.metadata.txt"
     'package=com.jiejietech.papernote',
     "versionName=$version",
     "versionCode=$versionCode",
-    'minSdk=23',
+    'minSdk=24',
     'targetSdk=36',
     'abis=armeabi-v7a,arm64-v8a,x86,x86_64',
     "sha256=$hash",

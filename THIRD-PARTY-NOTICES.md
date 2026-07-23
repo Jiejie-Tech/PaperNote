@@ -6,6 +6,10 @@ PaperNote includes or depends on the following third-party components. These com
 
 | Component | Version | Used by | License | Project |
 | --- | ---: | --- | --- | --- |
+| RapidOcrNet | 3.0.0 | Windows + Android on-device OCR and ink-to-text pipeline | Apache-2.0 | https://github.com/BobLd/RapidOcrNet |
+| PaddleOCR PP-OCRv6 Tiny models | 2026 bundled model files | Windows + Android multilingual offline recognition | Apache-2.0 | https://github.com/PaddlePaddle/PaddleOCR |
+| Microsoft.ML.OnnxRuntime | 1.27.0 | Windows + Android local neural-network inference | MIT | https://github.com/microsoft/onnxruntime |
+| Clipper2 | 2.0.0 | OCR text-region geometry dependency | BSL-1.0 | https://github.com/AngusJohnson/Clipper2 |
 | PdfPig | 0.1.13 | Windows + Android local PDF text, outline and internal-link extraction | Apache-2.0 | https://github.com/UglyToad/PdfPig |
 | PDFtoImage | 5.2.1 | Windows | MIT | https://github.com/sungaila/PDFtoImage |
 | SkiaSharp / SkiaSharp.NativeAssets.Win32 | 3.119.2 | Windows PDF rendering dependency chain | MIT plus bundled third-party notices | https://github.com/mono/SkiaSharp |
@@ -15,6 +19,8 @@ PaperNote includes or depends on the following third-party components. These com
 | Microsoft Android bindings, AndroidX, Google Android, Kotlin and related libraries | NuGet-resolved versions | Android dependency chain | MIT, Apache-2.0 and other licenses listed in the bundled notices | https://github.com/dotnet/android |
 | Open Sans | Bundled font files | Android UI | SIL Open Font License 1.1 | https://github.com/googlefonts/opensans |
 | GSAP | 3.14.2 | Promotional video source only | GreenSock Standard “No Charge” License | https://gsap.com/standard-license/ |
+
+OCR models and inference run entirely on the device. PaperNote bundles the PP-OCRv6 Tiny detector, recognizer, classifier and dictionary; no image or recognized text is uploaded.
 
 PdfPig is used entirely on-device to read existing PDF text layers, document outlines and internal GoTo links. PaperNote does not use PdfPig for network services, and imported source PDFs are not modified.
 

@@ -86,6 +86,8 @@ internal static class Program
             Assert(window.GetType().GetMethod("SaveMixedSelectionAsMaterialAsync", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Mixed selections should be saveable to the personal material library.");
             Assert(window.GetType().GetMethod("InsertSelectionMaterial", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Personal materials should be insertable as editable content.");
             Assert(GetField<SelectionMaterialLibraryService>(window, "_selectionMaterialLibraryService") is not null, "The Windows editor should initialize the local personal material library.");
+            Assert(window.GetType().GetMethod("RecognizeCurrentBackgroundAsync", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Windows should expose offline OCR for page backgrounds.");
+            Assert(window.GetType().GetMethod("RecognizeSelectedInkAsync", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Windows should expose offline ink-to-text conversion.");
 
             SetField(window, "_currentNotebookPassword", "background test password");
             Invoke(window, "UpdateNotebookProtectionButton");

@@ -113,7 +113,7 @@ $package='com.jiejietech.papernote';$apk=Join-Path $environment.RepoRoot 'artifa
 if(-not(Test-Path -LiteralPath $apk)){throw "APK not found: $apk"}
 $badging=(& $environment.Aapt2 dump badging $apk 2>&1|Out-String)
 if($LASTEXITCODE-ne 0){throw 'APK metadata inspection failed.'}
-foreach($required in @("name='$package'","versionCode='1'","versionName='1.0.0'","minSdkVersion:'23'","targetSdkVersion:'36'","application: label='PaperNote' icon='res/mipmap","native-code: 'arm64-v8a' 'armeabi-v7a' 'x86' 'x86_64'")){if($badging-notlike "*$required*"){throw "APK metadata assertion failed: $required"}}
+foreach($required in @("name='$package'","versionCode='1'","versionName='1.0.0'","minSdkVersion:'24'","targetSdkVersion:'36'","application: label='PaperNote' icon='res/mipmap","native-code: 'arm64-v8a' 'armeabi-v7a' 'x86' 'x86_64'")){if($badging-notlike "*$required*"){throw "APK metadata assertion failed: $required"}}
 $signature=(& $environment.ApkSigner verify --verbose --print-certs $apk 2>&1|Out-String)
 if($LASTEXITCODE-ne 0-or $signature-notmatch 'Verified using v[12] scheme'){throw 'APK signature check failed.'}
 Add-Type -AssemblyName System.IO.Compression.FileSystem

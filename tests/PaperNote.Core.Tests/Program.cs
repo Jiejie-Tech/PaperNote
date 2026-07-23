@@ -5,10 +5,34 @@ using System.Text.Json;
 using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
 using PaperNote.Core.Services;
+using SkiaSharp;
 
 var root = Path.Combine(Path.GetTempPath(), $"papernote-core-tests-{Guid.NewGuid():N}");
 try
 {
+    var ocrModelDirectory = Path.Combine(Directory.GetCurrentDirectory(), "src", "PaperNote.Core", "Assets", "Ocr", "v6");
+    Assert(OfflineRecognitionService.RequiredModelFiles.All(file => File.Exists(Path.Combine(ocrModelDirectory, file))), "离线 OCR 模型应随源码提供");
+    using (var missingRecognition = new OfflineRecognitionService(Path.Combine(root, "missing-ocr")))
+        Assert(!missingRecognition.IsAvailable && missingRecognition.MissingModelFiles.Count == 4, "模型缺失时应给出完整诊断");
+    Assert(OfflineRecognitionService.NormalizeRecognizedText("  第一行  \r\n\r\n 第二行 ") == $"第一行{Environment.NewLine}第二行", "识别文字应规范化空行和首尾空白");
+    var rasterInk = new[] { new PaperInkStroke { Width = 4, Points = [new() { X = 10, Y = 20 }, new() { X = 80, Y = 20 }, new() { X = 120, Y = 45 }] } };
+    var rasterPng = OfflineRecognitionService.RasterizeInk(rasterInk);
+    Assert(rasterPng.Length > 100 && rasterPng[0] == 0x89 && rasterPng[1] == 0x50, "手写识别栅格化应输出 PNG");
+    using (var bitmap = new SKBitmap(900, 220))
+    using (var canvas = new SKCanvas(bitmap))
+    using (var paint = new SKPaint { Color = SKColors.Black, IsAntialias = true })
+    using (var font = new SKFont(SKTypeface.Default, 92))
+    {
+        canvas.Clear(SKColors.White);
+        canvas.DrawText("PaperNote 2026", 45, 145, SKTextAlign.Left, font, paint);
+        canvas.Flush();
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        using var recognition = new OfflineRecognitionService(ocrModelDirectory);
+        var result = recognition.RecognizeImage(encoded.ToArray());
+        Assert(result.HasText && result.Text.Contains("2026", StringComparison.OrdinalIgnoreCase), $"离线 OCR 应能识别清晰的拉丁文字和数字，实际：{result.Text}");
+    }
+
     var eraseDocument = new PaperInkDocument();
     var eraseStroke = new PaperInkStroke { Points = [new() { X = 0, Y = 0 }, new() { X = 10, Y = 0 }, new() { X = 20, Y = 0 }, new() { X = 50, Y = 0 }, new() { X = 80, Y = 0 }, new() { X = 90, Y = 0 }, new() { X = 100, Y = 0 }] };
     eraseDocument.Strokes.Add(eraseStroke);

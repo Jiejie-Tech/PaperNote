@@ -276,6 +276,7 @@ public partial class MainWindow
         toolMenu.Items.Add(CreateMenuItem("荧光笔", "", (_, _) => ApplyMixedSelectionStyle(tool: PaperInkTool.Highlighter), hasInk && !_isReadOnly));
         menu.Items.Add(toolMenu);
         menu.Items.Add(CreateMenuItem("跳到关联录音", "", (_, _) => JumpSelectedInkToAudio(), hasInk));
+        menu.Items.Add(CreateMenuItem("手写转文字（离线）", "", async (_, _) => await RecognizeSelectedInkAsync(), hasInk && !_isReadOnly));
         menu.Items.Add(CreateMenuItem("保存到个人素材库…", "", async (_, _) => await SaveMixedSelectionAsMaterialAsync(), hasSelection && _selectionMaterials.Count < SelectionMaterialLibraryService.MaximumMaterials));
         menu.Items.Add(new Separator());
 

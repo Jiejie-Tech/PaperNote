@@ -27,4 +27,7 @@
     <ProjectReference Include="..\PaperNote.Core\PaperNote.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\PaperNote.Core\Assets\Ocr\v6\**\*" Link="ocr\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

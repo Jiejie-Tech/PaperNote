@@ -11,7 +11,7 @@
     <ApplicationId>com.jiejietech.papernote</ApplicationId>
     <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
-    <SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
     <AndroidTargetSdkVersion>36</AndroidTargetSdkVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <RuntimeIdentifiers>android-arm;android-arm64;android-x86;android-x64</RuntimeIdentifiers>
@@ -32,6 +32,7 @@
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
     <MauiAsset Include="..\..\THIRD-PARTY-NOTICES.md" LogicalName="THIRD-PARTY-NOTICES.md" />
     <MauiAsset Include="..\..\legal\third-party\**\*" LogicalName="legal/third-party/%(RecursiveDir)%(Filename)%(Extension)" />
+    <MauiAsset Include="..\PaperNote.Core\Assets\Ocr\v6\**\*" LogicalName="ocr/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

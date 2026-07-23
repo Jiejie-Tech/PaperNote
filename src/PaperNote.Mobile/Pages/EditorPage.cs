@@ -530,6 +530,7 @@ public sealed partial class EditorPage : ContentPage
             actions.Add("删除选中内容");
         }
 
+        if (!string.IsNullOrWhiteSpace(_page.BackgroundImageData)) actions.Add("识别当前页图片文字（离线 OCR）");
         actions.Add($"套索筛选：{SelectionFilterDisplayName(_canvas.SelectionFilter)}");
         actions.AddRange(["课堂与复习工具", "录音时间轴", "图层", "纸张设置", "适合屏幕", "清空当前页墨迹", "重命名当前页", "添加文字", "添加形状", "复制当前页", "删除当前页"]);
         actions.Add(_repository.IsCurrentEncrypted ? "管理密码保护" : "启用密码保护");
@@ -569,6 +570,8 @@ public sealed partial class EditorPage : ContentPage
                 else if (inkType == "荧光笔") _canvas.UpdateSelectionStyle(inkTool: PaperInkTool.Highlighter);
                 break;
             case "跳到关联录音": await JumpSelectedStrokeToAudioAsync(); break;
+            case "手写转文字（离线）": await RecognizeSelectedInkAsync(); break;
+            case "识别当前页图片文字（离线 OCR）": await RecognizeCurrentBackgroundAsync(); break;
             case "保存到个人素材库": await SaveSelectionAsMaterialAsync(); break;
             case "复制选中内容": _canvas.DuplicateSelection(); break;
             case "导出选区为 PNG":

@@ -11,5 +11,9 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="PdfPig" Version="0.1.13" />
+    <PackageReference Include="RapidOcrNet" Version="3.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Assets\Ocr\v6\**\*" CopyToOutputDirectory="PreserveNewest" Link="ocr\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

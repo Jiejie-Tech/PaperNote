@@ -56,7 +56,7 @@
 
 主字幕：`免费开源 · 现在下载 PaperNote`
 
-补充：`Windows 10/11 · Android 6.0+`
+补充：`Windows 10/11 · Android 7.0+`
 
 ## 制作注意
 
