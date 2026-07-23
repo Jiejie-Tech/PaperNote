@@ -915,6 +915,7 @@ public partial class MainWindow : Window
     {
         if (!_isInitialized || sender is not RadioButton radioButton || radioButton.Tag is not string tool) return;
         _activeTool = tool;
+        if (_activeTool != "Laser") ClearLaserPointer();
         switch (_activeTool)
         {
             case "Pen": _currentColor = _penColor; SelectColorButton(_penColor); ThicknessSlider.Maximum = 20; ThicknessSlider.Value = _penThickness; break;
@@ -988,13 +989,15 @@ public partial class MainWindow : Window
 
     private void InkSurface_PreviewStylusDown(object sender, StylusDownEventArgs e)
     {
-        if (TryBeginMixedLasso(e.GetPosition(InkSurface), true)) e.Handled = true;
+        if (_activeTool == "Laser") { UpdateLaserPointer(e.GetPosition(InkSurface)); e.Handled = true; }
+        else if (TryBeginMixedLasso(e.GetPosition(InkSurface), true)) e.Handled = true;
         else BeginPointerAction();
     }
 
     private void InkSurface_PreviewStylusMove(object sender, StylusEventArgs e)
     {
-        if (TryAppendMixedLassoPoint(e.GetPosition(InkSurface), true)) e.Handled = true;
+        if (_activeTool == "Laser") { UpdateLaserPointer(e.GetPosition(InkSurface)); e.Handled = true; }
+        else if (TryAppendMixedLassoPoint(e.GetPosition(InkSurface), true)) e.Handled = true;
     }
 
     private void InkSurface_PreviewStylusUp(object sender, StylusEventArgs e)
@@ -1005,13 +1008,15 @@ public partial class MainWindow : Window
 
     private void InkSurface_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (TryBeginMixedLasso(e.GetPosition(InkSurface), false)) e.Handled = true;
+        if (_activeTool == "Laser") { UpdateLaserPointer(e.GetPosition(InkSurface)); e.Handled = true; }
+        else if (TryBeginMixedLasso(e.GetPosition(InkSurface), false)) e.Handled = true;
         else BeginPointerAction();
     }
 
     private void InkSurface_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton == MouseButtonState.Pressed && TryAppendMixedLassoPoint(e.GetPosition(InkSurface), false)) e.Handled = true;
+        if (_activeTool == "Laser") { UpdateLaserPointer(e.GetPosition(InkSurface)); e.Handled = true; }
+        else if (e.LeftButton == MouseButtonState.Pressed && TryAppendMixedLassoPoint(e.GetPosition(InkSurface), false)) e.Handled = true;
     }
 
     private void InkSurface_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -1022,7 +1027,7 @@ public partial class MainWindow : Window
 
     private void BeginPointerAction()
     {
-        if (_isPointerActionActive || _isReadOnly || _activeTool is "Select" or "Pan") return;
+        if (_isPointerActionActive || _isReadOnly || _activeTool is "Select" or "Pan" or "Laser") return;
         _history.Record(InkSurface.Strokes); _isPointerActionActive = true; UpdateHistoryButtons();
     }
     private void EndPointerAction() => _isPointerActionActive = false;
@@ -1174,7 +1179,9 @@ public partial class MainWindow : Window
             case Key.H: HighlighterTool.IsChecked = true; e.Handled = true; break;
             case Key.E: EraserTool.IsChecked = true; e.Handled = true; break;
             case Key.L: SelectTool.IsChecked = true; e.Handled = true; break;
+            case Key.I: LaserTool.IsChecked = true; e.Handled = true; break;
             case Key.R: ToggleReadOnly_Click(sender, e); e.Handled = true; break;
+            case Key.F11 when (modifiers & ModifierKeys.Shift) != 0: TogglePresentationMode(); e.Handled = true; break;
             case Key.F11: ToggleFullscreen(); e.Handled = true; break;
             case Key.PageUp: NavigateRelativePage(-1); e.Handled = true; break;
             case Key.PageDown: NavigateRelativePage(1); e.Handled = true; break;

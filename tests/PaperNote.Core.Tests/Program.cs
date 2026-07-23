@@ -784,6 +784,18 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
     Assert(selectionExport.Width > 350 && selectionExport.Height > 100, "选区边界应包含笔宽、对象旋转和导出边距");
     Assert(SelectionExportService.Create(selectionExportPage, [], []) is null, "空选区不应生成导出文件");
 
+    var studyTape = StudyAssistService.CreateTape();
+    Assert(studyTape.Kind == "Shape" && studyTape.ShapeKind == "Tape" && studyTape.Opacity < 1, "Study tape should be a movable translucent page object");
+    Assert(StudyAssistService.CreateElement("Important").Single().Kind == "Text", "Study element library should create reusable page objects");
+    Assert(StudyAssistService.CreateElement("Question").Single().Text == "？", "Question element should preserve its full-width study marker");
+    var studyStrokeId = Guid.NewGuid();
+    var studyRecording = new AudioRecording { DisplayName = "lesson.m4a", DurationMilliseconds = 12_000 };
+    AudioTimelineService.AddCue(studyRecording, 4_200, studyStrokeId, "writing");
+    var studyPage = new NotebookPage { AudioRecordings = [studyRecording] };
+    var studyLocation = StudyAssistService.FindAudioForStroke(studyPage, studyStrokeId);
+    Assert(studyLocation is not null && studyLocation.Cue.OffsetMilliseconds == 4_200 && studyLocation.Recording.Id == studyRecording.Id, "Selected ink should resolve its recording time");
+    Assert(StudyAssistService.FindAudioForStroke(studyPage, Guid.NewGuid()) is null, "Unlinked ink should not resolve an audio cue");
+
     Console.WriteLine("PAPERNOTE CORE TESTS PASS");
 }
 finally

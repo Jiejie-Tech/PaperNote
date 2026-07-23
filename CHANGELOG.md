@@ -113,3 +113,6 @@
 .\scripts\build-android.ps1
 .\scripts\test-android.ps1 -SkipBuild -SkipUi
 ```
+
+- 新增 Windows/Android 课堂工具：胶带遮挡、常用元素库、激光笔和演示模式。
+- 新增点击/选中笔迹反向跳转到关联录音时间点。

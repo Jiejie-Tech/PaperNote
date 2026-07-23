@@ -10,7 +10,8 @@ public enum InkCanvasTool
     Highlighter,
     Eraser,
     Pan,
-    Select
+    Select,
+    Laser
 }
 
 public enum InkEraserMode

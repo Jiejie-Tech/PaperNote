@@ -78,6 +78,12 @@ internal static class Program
 
             window = new MainWindow();
             Assert(window.FindName("NotebookProtectionButton") is Button, "The editor should expose notebook password protection.");
+            Assert(window.FindName("StudyAssistButton") is Button, "The Windows toolbar should expose classroom and study tools.");
+            Assert(window.FindName("LaserTool") is RadioButton, "The Windows toolbar should expose a non-persistent laser pointer.");
+            Assert(window.FindName("LaserPointerTrail") is System.Windows.Shapes.Polyline, "The Windows page should expose a transient laser trail overlay.");
+            Assert(window.GetType().GetMethod("TogglePresentationMode", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Presentation mode handler should exist.");
+            Assert(window.GetType().GetMethod("JumpSelectedInkToAudio", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Selected ink should expose reverse audio navigation.");
+
             SetField(window, "_currentNotebookPassword", "background test password");
             Invoke(window, "UpdateNotebookProtectionButton");
             Assert(((Button)window.FindName("NotebookProtectionButton")).Content?.ToString()?.Contains("已保护", StringComparison.Ordinal) == true, "Protected notebook state should be visible without opening a dialog.");

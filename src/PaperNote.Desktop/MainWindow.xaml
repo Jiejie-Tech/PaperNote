@@ -387,6 +387,7 @@
                         <RadioButton x:Name="EraserTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="橡皮" Tag="Eraser" Checked="Tool_Checked" />
                         <RadioButton x:Name="SelectTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="套索" Tag="Select" Checked="Tool_Checked" />
                         <RadioButton x:Name="PanTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="浏览" Tag="Pan" Checked="Tool_Checked" />
+                        <RadioButton x:Name="LaserTool" AutomationProperties.AutomationId="LaserPointerTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="激光" Tag="Laser" Checked="Tool_Checked" />
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="纸张" VerticalAlignment="Center" Margin="8,0,6,0" Foreground="#6B7280" />
@@ -408,6 +409,7 @@
                         <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="44" Padding="7,0" Click="InsertImage_Click" ToolTip="插入本机图片">图片</Button>
                         <Button x:Name="ShapeActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="52" Padding="7,0" Click="ShapeActions_Click" ToolTip="插入矩形、圆形、三角形、菱形、箭头等">形状⌄</Button>
                         <Button x:Name="TextActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="52" Padding="7,0" Click="TextActions_Click" ToolTip="复制或导出当前笔记中的可提取文字">文字⌄</Button>
+                        <Button x:Name="StudyAssistButton" AutomationProperties.AutomationId="StudyAssistButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="68" Padding="7,0" Click="StudyAssist_Click" ToolTip="胶带遮挡、常用元素和演示模式">课堂⌄</Button>
                         <Button x:Name="SharedPaperTemplatesButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="68" Padding="7,0" Click="SharedPaperTemplates_Click" ToolTip="跨笔记保存和复用自定义纸张">模板库⌄</Button>
 <Button x:Name="SelectionActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="SelectionActions_Click" ToolTip="套索筛选、批量样式、旋转和跨页操作">选区⌄</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectActions_Click" ToolTip="复制、组合和层级操作">对象⌄</Button>
@@ -510,6 +512,8 @@
                                     <Canvas x:Name="LassoOverlay" Width="840" Height="1188" Background="{x:Null}" IsHitTestVisible="False" ClipToBounds="True">
                                         <Polyline x:Name="MixedLassoLine" Stroke="#0F766E" StrokeThickness="2" StrokeDashArray="4,3" Fill="#180F766E" Visibility="Collapsed" />
                                         <Polyline x:Name="AudioPlaybackHighlight" Stroke="#99FFC107" StrokeThickness="16" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Visibility="Collapsed" />
+                                        <Polyline x:Name="LaserPointerTrail" Stroke="#F43F5E" StrokeThickness="8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Opacity="0.9" Visibility="Collapsed" />
+                                        <Ellipse x:Name="LaserPointerDot" Width="22" Height="22" Fill="#F43F5E" Stroke="White" StrokeThickness="2" Visibility="Collapsed" />
                                     </Canvas>
                                 </Grid>
                             </Border>

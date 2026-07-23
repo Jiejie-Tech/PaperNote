@@ -32,6 +32,7 @@ public sealed class NativeInkCanvasView : View
     private bool _smoothingEnabled = true;
     private bool _geometryAssistEnabled;
     private Guid? _playbackStrokeId;
+    private readonly List<PaperInkPoint> _laserTrail = [];
     private PaperInkStroke? _activeStroke;
     private bool _eraseUndoPushed;
     private bool _panning;
@@ -92,6 +93,7 @@ public sealed class NativeInkCanvasView : View
             _page = view.Page;
             SetSelectedObject(null);
         }
+        if (_tool != view.Tool && view.Tool != InkCanvasTool.Laser) _laserTrail.Clear();
         _tool = view.Tool;
         if (_tool != InkCanvasTool.Select && (_selectedObjectIds.Count > 0 || _selectedStrokeIds.Count > 0)) ClearSelection();
         _inkColor = view.InkColor;
@@ -137,6 +139,7 @@ public sealed class NativeInkCanvasView : View
         _paint.Color = Color.Argb(30, 20, 30, 50);
         canvas.DrawRect(0, 0, PageWidth, PageHeight, _paint);
         DrawPlaybackHighlight(canvas);
+        DrawLaserPointer(canvas);
         DrawSelection(canvas);
     }
 
@@ -166,6 +169,38 @@ public sealed class NativeInkCanvasView : View
             }
         }
         _paint.Alpha = 255;
+    }
+
+
+    private void DrawLaserPointer(Canvas canvas)
+    {
+        if (_laserTrail.Count == 0) return;
+        _paint.SetStyle(Paint.Style.Stroke);
+        _paint.StrokeCap = Paint.Cap.Round;
+        _paint.StrokeJoin = Paint.Join.Round;
+        _paint.Color = Color.Argb(225, 244, 63, 94);
+        _paint.StrokeWidth = 8f;
+        for (var index = 1; index < _laserTrail.Count; index++)
+            canvas.DrawLine((float)_laserTrail[index - 1].X, (float)_laserTrail[index - 1].Y, (float)_laserTrail[index].X, (float)_laserTrail[index].Y, _paint);
+        var point = _laserTrail[^1];
+        _paint.SetStyle(Paint.Style.Fill);
+        canvas.DrawCircle((float)point.X, (float)point.Y, 11f, _paint);
+    }
+
+    private bool HandleLaserPointer(MotionEvent e)
+    {
+        var scale = _fitScale * _zoom;
+        if (scale <= 0) return true;
+        var point = new PaperInkPoint { X = (e.GetX() - _offsetX) / scale, Y = (e.GetY() - _offsetY) / scale };
+        if (e.ActionMasked == MotionEventActions.Down) _laserTrail.Clear();
+        if (e.ActionMasked is MotionEventActions.Down or MotionEventActions.Move)
+        {
+            _laserTrail.Add(point);
+            while (_laserTrail.Count > 14) _laserTrail.RemoveAt(0);
+            Invalidate();
+        }
+        else if (e.ActionMasked is MotionEventActions.Up or MotionEventActions.Cancel) Invalidate();
+        return true;
     }
 
     private IReadOnlyList<PaperInkStroke> GetVisibleStrokes()
@@ -269,6 +304,7 @@ public sealed class NativeInkCanvasView : View
         Parent?.RequestDisallowInterceptTouchEvent(true);
         if (e.PointerCount >= 2) return HandlePinch(e);
         if (_tool == InkCanvasTool.Select) return HandleObjectSelection(e);
+        if (_tool == InkCanvasTool.Laser) return HandleLaserPointer(e);
 
         var x = e.GetX();
         var y = e.GetY();

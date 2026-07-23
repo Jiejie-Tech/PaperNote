@@ -212,7 +212,7 @@ public sealed partial class EditorPage : ContentPage
         root.Add(_pdfProgressOverlay);
         Grid.SetRowSpan(_pdfProgressOverlay, 4);
         Content = root;
-        SizeChanged += (_, _) => _mainGrid.ColumnDefinitions[0].Width = Width >= 900 ? 230 : 0;
+        SizeChanged += (_, _) => _mainGrid.ColumnDefinitions[0].Width = !_mobilePresentationMode && Width >= 900 ? 230 : 0;
     }
 
     protected override void OnAppearing()
@@ -518,6 +518,7 @@ public sealed partial class EditorPage : ContentPage
             {
                 actions.Add("设置选中笔迹粗细");
                 actions.Add("设置选中笔迹类型");
+                actions.Add("跳到关联录音");
             }
             actions.AddRange(["复制选中内容", "导出选区为 PNG", "旋转 90°", "复制到其他页面", "移动到其他页面"]);
             if (selectedObjectCount > 0)
@@ -529,7 +530,7 @@ public sealed partial class EditorPage : ContentPage
         }
 
         actions.Add($"套索筛选：{SelectionFilterDisplayName(_canvas.SelectionFilter)}");
-        actions.AddRange(["录音时间轴", "图层", "纸张设置", "适合屏幕", "清空当前页墨迹", "重命名当前页", "添加文字", "添加形状", "复制当前页", "删除当前页"]);
+        actions.AddRange(["课堂与复习工具", "录音时间轴", "图层", "纸张设置", "适合屏幕", "清空当前页墨迹", "重命名当前页", "添加文字", "添加形状", "复制当前页", "删除当前页"]);
         actions.Add(_repository.IsCurrentEncrypted ? "管理密码保护" : "启用密码保护");
         actions.AddRange(["导出笔记本", "移到回收站"]);
 
@@ -566,6 +567,7 @@ public sealed partial class EditorPage : ContentPage
                 if (inkType == "钢笔") _canvas.UpdateSelectionStyle(inkTool: PaperInkTool.Pen);
                 else if (inkType == "荧光笔") _canvas.UpdateSelectionStyle(inkTool: PaperInkTool.Highlighter);
                 break;
+            case "跳到关联录音": await JumpSelectedStrokeToAudioAsync(); break;
             case "复制选中内容": _canvas.DuplicateSelection(); break;
             case "导出选区为 PNG":
                 await _pdf.ExportSelectionAndShareAsync(_page, _canvas.SelectedStrokeIds, _canvas.SelectedObjectIds);
@@ -583,6 +585,7 @@ public sealed partial class EditorPage : ContentPage
             case string filterAction when filterAction.StartsWith("套索筛选：", StringComparison.Ordinal):
                 await ChooseSelectionFilterAsync();
                 break;
+            case "课堂与复习工具": await ShowStudyAssistAsync(); break;
             case "录音时间轴": await ShowAudioTimelineAsync(); break;
             case "图层": await ShowLayerMenuAsync(); break;
             case "纸张设置": Template_Clicked(sender, e); break;

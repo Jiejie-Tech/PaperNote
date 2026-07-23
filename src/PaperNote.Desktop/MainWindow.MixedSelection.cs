@@ -275,6 +275,7 @@ public partial class MainWindow
         toolMenu.Items.Add(CreateMenuItem("钢笔", "", (_, _) => ApplyMixedSelectionStyle(tool: PaperInkTool.Pen), hasInk && !_isReadOnly));
         toolMenu.Items.Add(CreateMenuItem("荧光笔", "", (_, _) => ApplyMixedSelectionStyle(tool: PaperInkTool.Highlighter), hasInk && !_isReadOnly));
         menu.Items.Add(toolMenu);
+        menu.Items.Add(CreateMenuItem("跳到关联录音", "", (_, _) => JumpSelectedInkToAudio(), hasInk));
         menu.Items.Add(new Separator());
 
         menu.Items.Add(CreateMenuItem("复制一份", "", (_, _) => DuplicateMixedSelection(), canModify));
