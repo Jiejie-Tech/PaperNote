@@ -1,8 +1,10 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Ink;
 using System.Windows.Input;
 using System.Windows.Media;
+using PaperNote.Core.Ink;
+using PaperNote.Core.Services;
 using PaperNote.Desktop.Services;
 
 namespace PaperNote.Desktop;
@@ -24,10 +26,19 @@ public partial class MainWindow
     private string _penProfile = PenProfileFountain;
     private string _pressureCurve = PressureStandard;
     private string _strokeSmoothing = SmoothingStandard;
+    private bool _geometryAssistEnabled;
 
     private void PenSettings_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button) return;
+        var menu = BuildPenSettingsMenu();
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    private ContextMenu BuildPenSettingsMenu()
+    {
         var menu = new ContextMenu();
 
         var profileMenu = new MenuItem { Header = "笔型" };
@@ -49,6 +60,13 @@ public partial class MainWindow
         AddCheckedMenuItem(smoothingMenu, "标准", SmoothingStandard, _strokeSmoothing, SetStrokeSmoothing);
         AddCheckedMenuItem(smoothingMenu, "强力", SmoothingStrong, _strokeSmoothing, SetStrokeSmoothing);
         menu.Items.Add(smoothingMenu);
+        var geometryItem = new MenuItem { Header = "直线/形状自动规整", IsCheckable = true, IsChecked = _geometryAssistEnabled };
+        geometryItem.Click += (_, _) =>
+        {
+            _geometryAssistEnabled = !_geometryAssistEnabled;
+            StatusText.Text = _geometryAssistEnabled ? "几何辅助已开启：直线会吸附 45° 角，闭合笔迹会规整为矩形或椭圆。" : "几何辅助已关闭。";
+        };
+        menu.Items.Add(geometryItem);
 
         menu.Items.Add(new Separator());
         var presetMenu = new MenuItem { Header = "快捷笔预设" };
@@ -58,9 +76,7 @@ public partial class MainWindow
         presetMenu.Items.Add(CreateMenuItem("黄色荧光笔", "", (_, _) => ApplyInkPreset("YellowHighlighter"), true));
         menu.Items.Add(presetMenu);
 
-        menu.PlacementTarget = button;
-        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-        menu.IsOpen = true;
+        return menu;
     }
 
     private static void AddCheckedMenuItem(ItemsControl parent, string header, string value, string current, Action<string> apply)
@@ -197,7 +213,28 @@ public partial class MainWindow
         if (_isReadOnly) return;
         WpfInkAdapter.SetLayerId(e.Stroke, _currentPage?.ActiveLayerId);
         _ = WpfInkAdapter.GetStrokeId(e.Stroke);
-        if (_activeTool == "Pen") ApplyStrokeProfile(e.Stroke, _pressureCurve, _strokeSmoothing, _penProfile);
+        if (_activeTool == "Pen")
+        {
+            ApplyStrokeProfile(e.Stroke, _pressureCurve, _strokeSmoothing, _penProfile);
+            if (_geometryAssistEnabled) NormalizeGeometryStroke(e.Stroke);
+        }
+    }
+
+
+    private static void NormalizeGeometryStroke(Stroke stroke)
+    {
+        var paperStroke = new PaperInkStroke
+        {
+            Tool = PaperInkTool.Pen,
+            Points = stroke.StylusPoints.Select(point => new PaperInkPoint
+            {
+                X = point.X, Y = point.Y, Pressure = point.PressureFactor
+            }).ToList()
+        };
+        if (GeometryAssistService.NormalizeStroke(paperStroke) == GeometryAssistResult.None) return;
+        var points = new StylusPointCollection(stroke.StylusPoints.Description, paperStroke.Points.Count);
+        foreach (var point in paperStroke.Points) points.Add(new StylusPoint(point.X, point.Y, (float)Math.Clamp(point.Pressure, 0, 1)));
+        stroke.StylusPoints = points;
     }
 
     private static void ApplyStrokeProfile(Stroke stroke, string pressureCurve, string smoothing, string profile)

@@ -91,7 +91,7 @@ public static class PageBatchService
         var pages = selected.Select(page => CloneWithRemappedLinks(page, idMap, keepExternalLinks: false)).ToList();
         var extracted = new NotebookDocument
         {
-            FormatVersion = Math.Max(16, document.FormatVersion),
+            FormatVersion = Math.Max(17, document.FormatVersion),
             Title = string.IsNullOrWhiteSpace(title) ? $"{document.Title} - 提取页面" : title.Trim(),
             FolderName = document.FolderName,
             CoverStyle = document.CoverStyle,

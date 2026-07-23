@@ -90,7 +90,7 @@ public partial class MainWindow
         {
             var page = _currentNotebook.Pages[index];
             if (page.OutlineLevel <= 0) continue;
-            var title = string.IsNullOrWhiteSpace(page.Title) ? $"? {index + 1} ?" : page.Title.Trim();
+            var title = string.IsNullOrWhiteSpace(page.Title) ? $"第 {index + 1} 页" : page.Title.Trim();
             duplicateKeys.Add($"{page.Id:N}|{page.OutlineLevel}|{title}");
             results.Add(new OutlineEntryView { Id = page.Id, TargetPageId = page.Id, PageNumber = index + 1, Level = page.OutlineLevel, Title = title });
         }
@@ -100,7 +100,7 @@ public partial class MainWindow
             if (!imported.TargetPageId.HasValue) continue;
             var index = _currentNotebook.Pages.FindIndex(page => page.Id == imported.TargetPageId.Value);
             if (index < 0) continue;
-            var title = string.IsNullOrWhiteSpace(imported.Title) ? $"? {index + 1} ?" : imported.Title.Trim();
+            var title = string.IsNullOrWhiteSpace(imported.Title) ? $"第 {index + 1} 页" : imported.Title.Trim();
             var level = Math.Clamp(imported.Level, 1, 6);
             if (!duplicateKeys.Add($"{imported.TargetPageId.Value:N}|{level}|{title}")) continue;
             results.Add(new OutlineEntryView { Id = imported.Id, TargetPageId = imported.TargetPageId.Value, PageNumber = index + 1, Level = level, Title = title, IsImported = imported.IsImported });

@@ -14,6 +14,7 @@ function Invoke-Dotnet([string[]]$Arguments, [string]$FailureMessage) {
 }
 
 & (Join-Path $PSScriptRoot 'audit-open-source.ps1')
+& (Join-Path $PSScriptRoot 'check-text-integrity.ps1')
 
 Invoke-Dotnet @('build', (Join-Path $root 'PaperNote.sln'), '-c', 'Release') 'Release solution build failed.'
 Invoke-Dotnet @('run', '--project', (Join-Path $root 'tests\PaperNote.Core.Tests\PaperNote.Core.Tests.csproj'), '-c', 'Release', '--no-build') 'PaperNote.Core tests failed.'

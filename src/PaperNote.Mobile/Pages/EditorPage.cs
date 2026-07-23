@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
 using PaperNote.Core.Services;
@@ -27,6 +27,7 @@ public sealed partial class EditorPage : ContentPage
     private readonly Button _opacityButton;
     private readonly Button _eraserModeButton;
     private readonly Button _smoothingButton;
+    private readonly Button _geometryAssistButton;
     private readonly Dictionary<InkCanvasTool, Button> _toolButtons = [];
     private readonly Dictionary<InkCanvasTool, string> _toolLabels = [];
     private CancellationTokenSource? _saveCts;
@@ -77,7 +78,8 @@ public sealed partial class EditorPage : ContentPage
             BackgroundColor = Color.FromArgb("#E7EAF1"),
             FingerDrawingEnabled = Preferences.Default.Get("FingerDrawing", true),
             SmoothingEnabled = Preferences.Default.Get("InkSmoothing", true),
-            InkOpacity = Preferences.Default.Get("InkOpacity", 1d)
+            InkOpacity = Preferences.Default.Get("InkOpacity", 1d),
+            GeometryAssistEnabled = Preferences.Default.Get("GeometryAssist", false)
         };
         _canvas.InkChanged += Canvas_InkChanged;
         _canvas.HistoryChanged += (_, _) => UpdateHistory();
@@ -101,11 +103,12 @@ public sealed partial class EditorPage : ContentPage
         _redo = CreateToolbarButton("重做", (_, _) => { _canvas.Redo(); UpdateHistory(); }, "RedoButton");
         settingRow.Add(_widthButton, 0); settingRow.Add(_colorButton, 1); settingRow.Add(_fingerButton, 2); settingRow.Add(_undo, 3); settingRow.Add(_redo, 4);
 
-        var advancedRow = CreateToolbarRow(3);
+        var advancedRow = CreateToolbarRow(4);
         _opacityButton = CreateToolbarButton("不透明 100%", Opacity_Clicked, "InkOpacityButton");
         _eraserModeButton = CreateToolbarButton("橡皮：局部", EraserMode_Clicked, "EraserModeButton");
         _smoothingButton = CreateToolbarButton("平滑：开", ToggleSmoothing_Clicked, "SmoothingButton");
-        advancedRow.Add(_opacityButton, 0); advancedRow.Add(_eraserModeButton, 1); advancedRow.Add(_smoothingButton, 2);
+        _geometryAssistButton = CreateToolbarButton("几何：关", ToggleGeometryAssist_Clicked, "GeometryAssistButton");
+        advancedRow.Add(_opacityButton, 0); advancedRow.Add(_eraserModeButton, 1); advancedRow.Add(_smoothingButton, 2); advancedRow.Add(_geometryAssistButton, 3);
 
         var toolbar = new VerticalStackLayout
         {
@@ -229,7 +232,7 @@ public sealed partial class EditorPage : ContentPage
         CancelPendingSave();
         _pdfImportCts?.Cancel();
         StopActiveRecording();
-        _audio.StopPlayback();
+        StopAudioPlayback();
         _audioTimer.Stop();
         try { await _repository.SaveCurrentAsync(); } catch { }
     }
@@ -264,7 +267,7 @@ public sealed partial class EditorPage : ContentPage
     {
         CancelPendingSave();
         StopActiveRecording();
-        _audio.StopPlayback();
+        StopAudioPlayback();
         _audioTimer.Stop();
         try { await _repository.SaveCurrentAsync(); } catch { }
     }
@@ -285,9 +288,9 @@ public sealed partial class EditorPage : ContentPage
         if (_page is not null && _page.Id != page.Id)
         {
             StopActiveRecording();
-            _audio.StopPlayback();
-            _playingRecording = null;
+            StopAudioPlayback();
         }
+        _canvas.PlaybackStrokeId = null;
         _page = page;
         _repository.Current!.Document.CurrentPageId = page.Id;
         _canvas.Page = page;
@@ -421,6 +424,13 @@ public sealed partial class EditorPage : ContentPage
         UpdateAdvancedSettingsButtons();
     }
 
+    private void ToggleGeometryAssist_Clicked(object? sender, EventArgs e)
+    {
+        _canvas.GeometryAssistEnabled = !_canvas.GeometryAssistEnabled;
+        Preferences.Default.Set("GeometryAssist", _canvas.GeometryAssistEnabled);
+        UpdateAdvancedSettingsButtons();
+    }
+
     private void ToggleFingerDrawing_Clicked(object? sender, EventArgs e)
     {
         _canvas.FingerDrawingEnabled = !_canvas.FingerDrawingEnabled;
@@ -509,7 +519,7 @@ public sealed partial class EditorPage : ContentPage
                 actions.Add("设置选中笔迹粗细");
                 actions.Add("设置选中笔迹类型");
             }
-            actions.AddRange(["复制选中内容", "旋转 90°", "复制到其他页面", "移动到其他页面"]);
+            actions.AddRange(["复制选中内容", "导出选区为 PNG", "旋转 90°", "复制到其他页面", "移动到其他页面"]);
             if (selectedObjectCount > 0)
             {
                 actions.AddRange(["置于顶层", "置于底层"]);
@@ -555,6 +565,9 @@ public sealed partial class EditorPage : ContentPage
                 else if (inkType == "荧光笔") _canvas.UpdateSelectionStyle(inkTool: PaperInkTool.Highlighter);
                 break;
             case "复制选中内容": _canvas.DuplicateSelection(); break;
+            case "导出选区为 PNG":
+                await _pdf.ExportSelectionAndShareAsync(_page, _canvas.SelectedStrokeIds, _canvas.SelectedObjectIds);
+                break;
             case "旋转 90°": _canvas.RotateSelection(90); break;
             case "复制到其他页面": await TransferSelectionAsync(move: false); break;
             case "移动到其他页面": await TransferSelectionAsync(move: true); break;
@@ -693,6 +706,7 @@ public sealed partial class EditorPage : ContentPage
             if (_audio.HasPlayback) actions.Add("停止播放");
             if (_activeRecording is not null || _audio.HasPlayback) actions.Add("添加时间标记");
             actions.Add("跳转到时间标记");
+            actions.Add("查看波形并跳转");
             actions.Add("重命名录音");
             actions.Add("删除录音");
         }
@@ -713,6 +727,7 @@ public sealed partial class EditorPage : ContentPage
                 case "停止播放": StopAudioPlayback(); break;
                 case "添加时间标记": await AddAudioCueAsync(); break;
                 case "跳转到时间标记": await JumpToAudioCueAsync(); break;
+                case "查看波形并跳转": await ShowAudioWaveformAsync(); break;
                 case "重命名录音": await RenameRecordingAsync(); break;
                 case "删除录音": await DeleteRecordingAsync(); break;
             }
@@ -802,6 +817,7 @@ public sealed partial class EditorPage : ContentPage
         var path = AudioAttachmentService.ResolvePath(_repository.Storage.NotebooksDirectory, recording.LocalFilePath);
         _audio.Play(path, startMilliseconds);
         _playingRecording = recording;
+        _canvas.PlaybackStrokeId = AudioTimelineService.GetActiveStrokeId(recording, startMilliseconds);
         _lastPresentedAudioCue = -1;
         _audioTimer.Start();
         UpdateAudioButton();
@@ -811,6 +827,7 @@ public sealed partial class EditorPage : ContentPage
     {
         _audio.StopPlayback();
         _playingRecording = null;
+        _canvas.PlaybackStrokeId = null;
         _lastPresentedAudioCue = -1;
         if (_activeRecording is null) _audioTimer.Stop();
         UpdateAudioButton();
@@ -855,6 +872,20 @@ public sealed partial class EditorPage : ContentPage
         PlayRecording(recording, recording.Cues[index].OffsetMilliseconds);
     }
 
+    private async Task ShowAudioWaveformAsync()
+    {
+        var recording = _playingRecording ?? await ChooseRecordingAsync("选择录音");
+        if (recording is null) return;
+        var waveform = AudioWaveformService.FormatCompact(recording.WaveformPeaks, 32,
+            _playingRecording?.Id == recording.Id
+                ? AudioTimelineService.GetPlaybackProgress(recording, _audio.PlaybackPositionMilliseconds)
+                : -1);
+        var choices = new[] { "从头播放", "跳到 25%", "跳到 50%", "跳到 75%" };
+        var choice = await DisplayActionSheetAsync($"{recording.DisplayName}\n{waveform}", "取消", null, choices);
+        var ratio = choice switch { "从头播放" => 0d, "跳到 25%" => .25d, "跳到 50%" => .5d, "跳到 75%" => .75d, _ => -1d };
+        if (ratio >= 0) PlayRecording(recording, (long)Math.Round(recording.DurationMilliseconds * ratio));
+    }
+
     private async Task RenameRecordingAsync()
     {
         var recording = await ChooseRecordingAsync("选择录音");
@@ -883,6 +914,7 @@ public sealed partial class EditorPage : ContentPage
         if (_activeRecording is not null)
         {
             _activeRecording.DurationMilliseconds = _audio.RecordingElapsedMilliseconds;
+            AudioWaveformService.AppendSample(_activeRecording, _audio.RecordingAmplitude);
             UpdateAudioButton();
             return;
         }
@@ -900,9 +932,10 @@ public sealed partial class EditorPage : ContentPage
             StopAudioPlayback();
             return;
         }
-        var cue = _playingRecording.Cues.LastOrDefault(item => item.OffsetMilliseconds <= position && position - item.OffsetMilliseconds <= 600);
+        var cue = _playingRecording.Cues.LastOrDefault(item => item.OffsetMilliseconds <= position && position - item.OffsetMilliseconds <= 1400);
         if (cue is not null && cue.OffsetMilliseconds != _lastPresentedAudioCue)
             _lastPresentedAudioCue = cue.OffsetMilliseconds;
+        _canvas.PlaybackStrokeId = AudioTimelineService.GetActiveStrokeId(_playingRecording, position);
         UpdateAudioButton(cue?.Label);
     }
 

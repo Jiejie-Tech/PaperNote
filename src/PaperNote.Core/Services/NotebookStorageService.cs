@@ -74,7 +74,7 @@ public sealed partial class NotebookStorageService
     {
         EnsurePathIsInNotebookDirectory(filePath, allowMissing: true);
         NormalizeDocument(document);
-        document.FormatVersion = Math.Max(document.FormatVersion, 16);
+        document.FormatVersion = Math.Max(document.FormatVersion, 17);
         document.ModifiedAt = DateTimeOffset.Now;
         var bytes = JsonSerializer.SerializeToUtf8Bytes(document, _jsonOptions);
         var directory = Path.GetDirectoryName(filePath)
@@ -284,6 +284,12 @@ public sealed partial class NotebookStorageService
                 recording.DurationMilliseconds = Math.Max(0, recording.DurationMilliseconds);
                 recording.FileSize = Math.Max(0, recording.FileSize);
                 recording.MimeType = string.IsNullOrWhiteSpace(recording.MimeType) ? "audio/mp4" : recording.MimeType.Trim();
+                recording.WaveformPeaks ??= [];
+                recording.WaveformPeaks = recording.WaveformPeaks
+                    .Where(float.IsFinite)
+                    .Select(value => Math.Clamp(value, 0f, 1f))
+                    .Take(AudioWaveformService.MaximumStoredPeakCount)
+                    .ToList();
                 recording.Cues ??= [];
                 recording.Cues = recording.Cues.Where(cue => cue is not null).ToList();
                 var usedCueIds = new HashSet<Guid>();

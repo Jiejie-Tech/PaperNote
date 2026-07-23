@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -351,6 +351,26 @@ internal static class Program
             var selectionMenu = (ContextMenu)(Invoke(window, "CreateSelectionActionsMenu") ?? throw new InvalidOperationException("Missing mixed selection menu."));
             Assert(MenuContainsHeader(selectionMenu.Items, "全部内容") && MenuContainsHeader(selectionMenu.Items, "仅钢笔") && MenuContainsHeader(selectionMenu.Items, "仅荧光笔") && MenuContainsHeader(selectionMenu.Items, "仅文字") && MenuContainsHeader(selectionMenu.Items, "仅图片") && MenuContainsHeader(selectionMenu.Items, "仅形状"), "Mixed selection menu should expose all ink and object filters.");
             Assert(MenuContainsHeader(selectionMenu.Items, "设置透明度") && MenuContainsHeader(selectionMenu.Items, "设置笔迹粗细") && MenuContainsHeader(selectionMenu.Items, "设置笔迹类型") && MenuContainsHeader(selectionMenu.Items, "复制到其他页面") && MenuContainsHeader(selectionMenu.Items, "移动到其他页面"), "Mixed selection menu should expose batch style and cross-page actions.");
+            Assert(MenuContainsHeader(selectionMenu.Items, "导出选区为 PNG…"), "Mixed selection menu should expose local PNG export.");
+
+            var penSettingsMenu = (ContextMenu)(Invoke(window, "BuildPenSettingsMenu") ?? throw new InvalidOperationException("Missing pen settings menu."));
+            Assert(MenuContainsHeader(penSettingsMenu.Items, "直线/形状自动规整"), "Pen settings should expose geometry assistance.");
+
+            var playbackStrokeId = WpfInkAdapter.GetStrokeId(mixedInkSurface.Strokes[0]);
+            page.AudioRecordings.Add(new AudioRecording
+            {
+                DisplayName = "后台录音",
+                DurationMilliseconds = 4_000,
+                WaveformPeaks = [0, .25f, .8f, .4f, 1],
+                Cues = [new AudioCue { OffsetMilliseconds = 500, StrokeId = playbackStrokeId, Label = "书写" }]
+            });
+            var audioMenu = (ContextMenu)(Invoke(window, "BuildAudioTimelineMenu") ?? throw new InvalidOperationException("Missing audio timeline menu."));
+            Assert(MenuContainsHeader(audioMenu.Items, "波形与跳转") && MenuContainsHeader(audioMenu.Items, "跳到 25%") && MenuContainsHeader(audioMenu.Items, "时间标记（1）"), "Audio menu should expose waveform, percentage jumps, and cue timeline without mojibake.");
+            Invoke(window, "UpdateAudioPlaybackHighlight", playbackStrokeId);
+            var audioHighlight = (System.Windows.Shapes.Polyline)(window.FindName("AudioPlaybackHighlight") ?? throw new InvalidOperationException("Missing audio playback highlight."));
+            Assert(audioHighlight.Visibility == Visibility.Visible && audioHighlight.Points.Count >= 2, "Audio cue should highlight its linked stroke.");
+            Invoke(window, "UpdateAudioPlaybackHighlight", new object?[] { null });
+            Assert(audioHighlight.Visibility == Visibility.Collapsed && audioHighlight.Points.Count == 0, "Stopping audio highlight should clear the overlay.");
             var objectsBeforeMixedDelete = page.Objects.Count;
             Assert((bool)(Invoke(window, "DeleteMixedSelection") ?? false), "Mixed delete should remove selected ink and editable objects in one operation.");
             Assert(mixedInkSurface.Strokes.Count == 0 && page.Objects.Count == 1 && page.Objects[0].Id == mixedLockObject.Id, "Mixed delete should retain the locked object only.");
@@ -648,7 +668,7 @@ internal static class Program
             outlineDocument.Pages[0].Title = "绪论";
             outlineDocument.Pages.Add(new NotebookPage { Title = "线性代数" });
             outlineDocument.Pages.Add(new NotebookPage { Title = "矩阵分解" });
-            outlineDocument.Pages.Add(new NotebookPage { Title = "练习" });
+            outlineDocument.Pages.Add(new NotebookPage { Title = string.Empty, OutlineLevel = 1 });
             SetField(window, "_currentNotebook", outlineDocument);
             SetField(window, "_currentPage", outlineDocument.Pages[0]);
             Invoke(window, "LoadPage", outlineDocument.Pages[0]);
@@ -664,7 +684,9 @@ internal static class Program
             var outlineSearchBox = (TextBox)(window.FindName("OutlineSearchBox") ?? throw new InvalidOperationException("Missing outline search box."));
             var outlineListBox = (ListBox)(window.FindName("OutlineListBox") ?? throw new InvalidOperationException("Missing outline list."));
             var outlineButton = (Button)(window.FindName("CurrentPageOutlineButton") ?? throw new InvalidOperationException("Missing current outline button."));
-            Assert(outlineOverlay.Visibility == Visibility.Visible && outlineListBox.Items.Count == 3 && Equals(outlineButton.Content, "三级⌄"), "Outline overlay should list only outlined pages and reflect the current level.");
+            Assert(outlineOverlay.Visibility == Visibility.Visible && outlineListBox.Items.Count == 4 && Equals(outlineButton.Content, "三级⌄"), "Outline overlay should list only outlined pages and reflect the current level.");
+            var untitledOutlineEntry = outlineListBox.Items.Cast<object>().Single(item => GetProperty<Guid>(item, "TargetPageId") == outlineDocument.Pages[3].Id);
+            Assert(GetProperty<string>(untitledOutlineEntry, "Title") == "第 4 页", "Untitled outline page should use the readable page-number fallback.");
             outlineSearchBox.Text = "线性";
             Assert(outlineListBox.Items.Count == 1 && GetProperty<int>(outlineListBox.Items[0], "PageNumber") == 2, "Outline search should filter by title.");
             outlineSearchBox.Text = string.Empty;
@@ -844,7 +866,7 @@ internal static class Program
             Assert(File.Exists(closeWorkspacePath), "Window close should persist workspace state without blocking the UI thread.");
 
             Console.WriteLine("BACKGROUND WPF UI TEST PASS");
-            Console.WriteLine("隐藏 WPF 的恢复中心、整库搜索、PDF 文本搜索与目录、内部链接跳转、批注筛选与文字评论、页面批量菜单、文字提取、更多形状、可见标签条、书架排序、资料库备份入口、共享模板、多笔型、压感曲线、笔迹平滑、PDF 工具、页面导航、数据容错，以及异步关闭保存均通过");
+            Console.WriteLine("隐藏 WPF 的恢复中心、整库搜索、PDF 文本搜索与目录、内部链接跳转、批注筛选与文字评论、页面批量菜单、选区 PNG、几何辅助、录音波形与笔迹高亮、文字提取、更多形状、可见标签条、书架排序、资料库备份入口、共享模板、多笔型、压感曲线、笔迹平滑、PDF 工具、页面导航、数据容错，以及异步关闭保存均通过");
         }
         finally
         {

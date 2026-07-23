@@ -3,6 +3,7 @@ param([switch]$SkipBuild,[switch]$SkipUi,[string]$Serial)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'android-common.ps1')
+& (Join-Path $PSScriptRoot 'check-text-integrity.ps1')
 $environment=Get-PaperNoteAndroidEnvironment
 $sourceAssertions=@(
   @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='AddTool(toolRow, InkCanvasTool.Select';Label='select tool'},
@@ -53,7 +54,20 @@ $sourceAssertions=@(
   @{Path='src\PaperNote.Core\Models\NotebookDocument.cs';Pattern='OutlineEntries';Label='stored PDF outline'},
   @{Path='src\PaperNote.Core\Services\PdfDocumentContentService.cs';Pattern='UglyToad.PdfPig';Label='PdfPig PDF reader'},
   @{Path='src\PaperNote.Core\Services\PdfDocumentContentService.cs';Pattern='AttachToImportedPages';Label='PDF content attachment'},
-  @{Path='src\PaperNote.Mobile\Services\AndroidPdfService.cs';Pattern='PdfDocumentContentService.ExtractAsync';Label='Android PDF content extraction'}
+  @{Path='src\PaperNote.Mobile\Services\AndroidPdfService.cs';Pattern='PdfDocumentContentService.ExtractAsync';Label='Android PDF content extraction'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='GeometryAssistButton';Label='geometry assist toolbar control'},
+  @{Path='src\PaperNote.Mobile\Controls\InkCanvasView.cs';Pattern='GeometryAssistEnabled';Label='geometry assist bindable state'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='GeometryAssistService.NormalizeStroke';Label='geometry normalization'},
+  @{Path='src\PaperNote.Mobile\Services\AndroidPdfService.cs';Pattern='ExportSelectionAndShareAsync';Label='selection PNG sharing'},
+  @{Path='src\PaperNote.Mobile\Services\AndroidPdfService.cs';Pattern='SelectionExportService.Create';Label='shared selection export'},
+  @{Path='src\PaperNote.Mobile\Controls\InkCanvasView.cs';Pattern='PlaybackStrokeId';Label='audio playback stroke state'},
+  @{Path='src\PaperNote.Mobile\Platforms\Android\NativeInkCanvasView.cs';Pattern='DrawPlaybackHighlight';Label='audio stroke highlight rendering'},
+  @{Path='src\PaperNote.Mobile\Services\MobileAudioService.cs';Pattern='RecordingAmplitude';Label='local recording amplitude'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='AudioWaveformService.AppendSample';Label='waveform capture'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='查看波形并跳转';Label='waveform jump menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='导出选区为 PNG';Label='selection PNG menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='_canvas.PlaybackStrokeId = null';Label='playback highlight cleanup'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='StopAudioPlayback();';Label='audio lifecycle cleanup'}
 )
 foreach($assertion in $sourceAssertions){
   $path=Join-Path $environment.RepoRoot $assertion.Path

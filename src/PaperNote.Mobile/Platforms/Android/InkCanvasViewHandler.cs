@@ -17,6 +17,8 @@ public sealed class InkCanvasViewHandler : ViewHandler<InkCanvasView, NativeInkC
         [nameof(InkCanvasView.InkOpacity)] = MapState,
         [nameof(InkCanvasView.EraserMode)] = MapState,
         [nameof(InkCanvasView.SmoothingEnabled)] = MapState,
+        [nameof(InkCanvasView.GeometryAssistEnabled)] = MapState,
+        [nameof(InkCanvasView.PlaybackStrokeId)] = MapState,
         [nameof(InkCanvasView.SelectionFilter)] = MapState
     };
 

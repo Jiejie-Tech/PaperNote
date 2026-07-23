@@ -217,6 +217,40 @@ public sealed class AndroidPdfService
             throw new InvalidDataException("PDF 页面图像编码失败。");
         return stream.ToArray();
     }
+    public async Task<string?> ExportSelectionAndShareAsync(
+        NotebookPage page,
+        IReadOnlyCollection<Guid> strokeIds,
+        IReadOnlyCollection<Guid> objectIds,
+        CancellationToken cancellationToken = default)
+    {
+        var selection = SelectionExportService.Create(page, strokeIds, objectIds);
+        if (selection is null) return null;
+        cancellationToken.ThrowIfCancellationRequested();
+        var outputPath = IOPath.Combine(FileSystem.CacheDirectory, $"PaperNote-Selection-{DateTime.Now:yyyyMMdd-HHmmss}.png");
+        using var bitmap = Bitmap.CreateBitmap(840, 1188, Bitmap.Config.Argb8888!)
+            ?? throw new InvalidOperationException("无法创建选区图像。");
+        using var canvas = new Canvas(bitmap);
+        using var paint = new Paint(PaintFlags.AntiAlias | PaintFlags.Dither);
+        AndroidPageRenderer.DrawPage(canvas, selection.Page, selection.Page.Ink, paint, null);
+        var left = Math.Clamp((int)Math.Floor(selection.X), 0, bitmap.Width - 1);
+        var top = Math.Clamp((int)Math.Floor(selection.Y), 0, bitmap.Height - 1);
+        var width = Math.Clamp((int)Math.Ceiling(selection.Width), 1, bitmap.Width - left);
+        var height = Math.Clamp((int)Math.Ceiling(selection.Height), 1, bitmap.Height - top);
+        using var cropped = Bitmap.CreateBitmap(bitmap, left, top, width, height)
+            ?? throw new InvalidOperationException("无法裁剪选区图像。");
+        await using (var stream = File.Create(outputPath))
+        {
+            if (!cropped.Compress(Bitmap.CompressFormat.Png!, 100, stream))
+                throw new InvalidDataException("选区 PNG 编码失败。");
+        }
+        await Share.Default.RequestAsync(new ShareFileRequest
+        {
+            Title = "导出 PaperNote 选区",
+            File = new ShareFile(outputPath, "image/png")
+        });
+        return outputPath;
+    }
+
     public async Task<string> ExportAndShareAsync(NotebookDocument notebook, IReadOnlyList<NotebookPage>? selectedPages = null, CancellationToken cancellationToken = default)
     {
         var pages = selectedPages ?? notebook.Pages;

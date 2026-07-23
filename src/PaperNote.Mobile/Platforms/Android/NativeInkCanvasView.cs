@@ -30,6 +30,8 @@ public sealed class NativeInkCanvasView : View
     private bool _fingerDrawing;
     private InkEraserMode _eraserMode = InkEraserMode.Partial;
     private bool _smoothingEnabled = true;
+    private bool _geometryAssistEnabled;
+    private Guid? _playbackStrokeId;
     private PaperInkStroke? _activeStroke;
     private bool _eraseUndoPushed;
     private bool _panning;
@@ -98,6 +100,8 @@ public sealed class NativeInkCanvasView : View
         _fingerDrawing = view.FingerDrawingEnabled;
         _eraserMode = view.EraserMode;
         _smoothingEnabled = view.SmoothingEnabled;
+        _geometryAssistEnabled = view.GeometryAssistEnabled;
+        _playbackStrokeId = view.PlaybackStrokeId;
         if (_selectionFilter != view.SelectionFilter)
         {
             _selectionFilter = view.SelectionFilter;
@@ -132,7 +136,36 @@ public sealed class NativeInkCanvasView : View
         _paint.StrokeWidth = 1f;
         _paint.Color = Color.Argb(30, 20, 30, 50);
         canvas.DrawRect(0, 0, PageWidth, PageHeight, _paint);
+        DrawPlaybackHighlight(canvas);
         DrawSelection(canvas);
+    }
+
+    private void DrawPlaybackHighlight(Canvas canvas)
+    {
+        if (_playbackStrokeId is not Guid strokeId) return;
+        var stroke = _document.Strokes.FirstOrDefault(item => item.Id == strokeId);
+        if (stroke is null || stroke.Points.Count == 0) return;
+        _paint.SetStyle(Paint.Style.Stroke);
+        _paint.StrokeCap = Paint.Cap.Round;
+        _paint.StrokeJoin = Paint.Join.Round;
+        _paint.Color = Color.Argb(150, 255, 193, 7);
+        _paint.StrokeWidth = (float)Math.Max(14, stroke.Width + 10);
+        if (stroke.Points.Count == 1)
+        {
+            var point = stroke.Points[0];
+            _paint.SetStyle(Paint.Style.Fill);
+            canvas.DrawCircle((float)point.X, (float)point.Y, _paint.StrokeWidth / 2, _paint);
+        }
+        else
+        {
+            for (var index = 1; index < stroke.Points.Count; index++)
+            {
+                var previous = stroke.Points[index - 1];
+                var current = stroke.Points[index];
+                canvas.DrawLine((float)previous.X, (float)previous.Y, (float)current.X, (float)current.Y, _paint);
+            }
+        }
+        _paint.Alpha = 255;
     }
 
     private IReadOnlyList<PaperInkStroke> GetVisibleStrokes()
@@ -276,6 +309,7 @@ public sealed class NativeInkCanvasView : View
                 {
                     AddPoint(e, x, y, e.Pressure);
                     if (_smoothingEnabled) InkEditingService.SmoothStroke(_activeStroke, .35);
+                    if (_geometryAssistEnabled) GeometryAssistService.NormalizeStroke(_activeStroke);
                     var completedStroke = _activeStroke;
                     _activeStroke = null;
                     _inkSpatialIndex.Update(_document, null, [completedStroke]);

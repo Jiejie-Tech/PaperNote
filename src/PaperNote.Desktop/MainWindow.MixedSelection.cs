@@ -1,8 +1,11 @@
-﻿using System.Windows;
+using System.IO;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Ink;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
 using PaperNote.Core.Services;
@@ -275,6 +278,7 @@ public partial class MainWindow
         menu.Items.Add(new Separator());
 
         menu.Items.Add(CreateMenuItem("复制一份", "", (_, _) => DuplicateMixedSelection(), canModify));
+        menu.Items.Add(CreateMenuItem("导出选区为 PNG…", "", (_, _) => ExportMixedSelectionPng(), hasSelection));
         menu.Items.Add(CreateMenuItem("向左旋转 90°", "Alt+Left", (_, _) => RotateMixedSelection(-90), canModify));
         menu.Items.Add(CreateMenuItem("向右旋转 90°", "Alt+Right", (_, _) => RotateMixedSelection(90), canModify));
         menu.Items.Add(CreateSelectionTransferMenu("复制到其他页面", move: false, canModify));
@@ -345,6 +349,44 @@ public partial class MainWindow
         UpdateHistoryButtons();
         StatusText.Text = "已更新选中内容样式";
         return true;
+    }
+
+    private bool ExportMixedSelectionPng()
+    {
+        if (_currentPage is null || !HasMixedSelection()) return false;
+        SyncCurrentInkModelForSelection();
+        var selection = SelectionExportService.Create(_currentPage, GetSelectedStrokeIds(), _selectedPageObjectIds);
+        if (selection is null) return false;
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出选区为 PNG",
+            Filter = "PNG 图片|*.png",
+            DefaultExt = ".png",
+            AddExtension = true,
+            FileName = $"PaperNote-Selection-{DateTime.Now:yyyyMMdd-HHmmss}.png"
+        };
+        if (dialog.ShowDialog(this) != true) return false;
+        try
+        {
+            const double scale = 2;
+            var bitmap = PageThumbnailService.CreatePageBitmap(selection.Page, 1680, 2376);
+            var x = Math.Clamp((int)Math.Floor(selection.X * scale), 0, bitmap.PixelWidth - 1);
+            var y = Math.Clamp((int)Math.Floor(selection.Y * scale), 0, bitmap.PixelHeight - 1);
+            var width = Math.Clamp((int)Math.Ceiling(selection.Width * scale), 1, bitmap.PixelWidth - x);
+            var height = Math.Clamp((int)Math.Ceiling(selection.Height * scale), 1, bitmap.PixelHeight - y);
+            var crop = new CroppedBitmap(bitmap, new Int32Rect(x, y, width, height));
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(crop));
+            using var stream = File.Create(dialog.FileName);
+            encoder.Save(stream);
+            StatusText.Text = $"选区已导出：{Path.GetFileName(dialog.FileName)}";
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            MessageBox.Show(this, $"无法导出选区。\n\n{exception.Message}", "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
     }
 
     private bool DuplicateMixedSelection()

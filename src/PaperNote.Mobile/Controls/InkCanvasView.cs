@@ -41,6 +41,10 @@ public sealed class InkCanvasView : View
         nameof(SmoothingEnabled), typeof(bool), typeof(InkCanvasView), true, propertyChanged: InvalidateNative);
     public static readonly BindableProperty SelectionFilterProperty = BindableProperty.Create(
         nameof(SelectionFilter), typeof(PageSelectionFilter), typeof(InkCanvasView), PageSelectionFilter.All, propertyChanged: InvalidateNative);
+    public static readonly BindableProperty GeometryAssistEnabledProperty = BindableProperty.Create(
+        nameof(GeometryAssistEnabled), typeof(bool), typeof(InkCanvasView), false, propertyChanged: InvalidateNative);
+    public static readonly BindableProperty PlaybackStrokeIdProperty = BindableProperty.Create(
+        nameof(PlaybackStrokeId), typeof(Guid?), typeof(InkCanvasView), null, propertyChanged: InvalidateNative);
 
     public PaperInkDocument Document
     {
@@ -100,6 +104,17 @@ public sealed class InkCanvasView : View
     {
         get => (PageSelectionFilter)GetValue(SelectionFilterProperty);
         set => SetValue(SelectionFilterProperty, value);
+    }
+
+    public bool GeometryAssistEnabled
+    {
+        get => (bool)GetValue(GeometryAssistEnabledProperty);
+        set => SetValue(GeometryAssistEnabledProperty, value);
+    }
+    public Guid? PlaybackStrokeId
+    {
+        get => (Guid?)GetValue(PlaybackStrokeIdProperty);
+        set => SetValue(PlaybackStrokeIdProperty, value);
     }
 
     public event EventHandler? InkChanged;

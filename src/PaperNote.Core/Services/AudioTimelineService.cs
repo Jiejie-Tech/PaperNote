@@ -56,9 +56,32 @@ public static class AudioTimelineService
             .OrderBy(cue => cue.OffsetMilliseconds)
             .ToArray();
 
+
+    public static Guid? GetActiveStrokeId(AudioRecording recording, long offsetMilliseconds, long holdMilliseconds = 1400)
+    {
+        ArgumentNullException.ThrowIfNull(recording);
+        offsetMilliseconds = Math.Max(0, offsetMilliseconds);
+        holdMilliseconds = Math.Max(100, holdMilliseconds);
+        var cue = recording.Cues
+            .Where(item => item.StrokeId.HasValue && item.OffsetMilliseconds <= offsetMilliseconds)
+            .OrderByDescending(item => item.OffsetMilliseconds)
+            .FirstOrDefault();
+        return cue is not null && offsetMilliseconds - cue.OffsetMilliseconds <= holdMilliseconds ? cue.StrokeId : null;
+    }
+
+    public static double GetPlaybackProgress(AudioRecording recording, long offsetMilliseconds)
+    {
+        ArgumentNullException.ThrowIfNull(recording);
+        return recording.DurationMilliseconds <= 0
+            ? 0
+            : Math.Clamp(offsetMilliseconds / (double)recording.DurationMilliseconds, 0, 1);
+    }
+
     public static string FormatDuration(long milliseconds)
     {
         var value = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
-        return value.TotalHours >= 1 ? value.ToString(@"h:mm:ss") : value.ToString(@"m:ss");
+        return value.TotalHours >= 1
+            ? $"{(int)value.TotalHours}:{value.Minutes:00}:{value.Seconds:00}"
+            : $"{(int)value.TotalMinutes}:{value.Seconds:00}";
     }
 }

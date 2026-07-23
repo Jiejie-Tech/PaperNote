@@ -16,6 +16,8 @@ public partial class MainWindow
     private readonly DispatcherTimer _audioStatusTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private AudioRecording? _desktopActiveRecording;
     private NotebookPage? _desktopRecordingPage;
+    private AudioRecording? _desktopPlayingRecording;
+    private Guid? _desktopHighlightedStrokeId;
     private bool _audioTimelineInitialized;
 
     private void EnsureAudioTimelineInitialized()
@@ -54,7 +56,7 @@ public partial class MainWindow
         if (_desktopAudioService.IsPlaying || _desktopAudioService.IsPaused)
         {
             menu.Items.Add(CreateMenuItem(_desktopAudioService.IsPaused ? "继续播放" : "暂停播放", string.Empty, (_, _) => ToggleDesktopPlaybackPause(), true));
-            menu.Items.Add(CreateMenuItem("停止播放", string.Empty, (_, _) => { _desktopAudioService.StopPlayback(); UpdateAudioTimelineButton(); }, true));
+            menu.Items.Add(CreateMenuItem("停止播放", string.Empty, (_, _) => StopDesktopPlayback(), true));
         }
 
         menu.Items.Add(new Separator());
@@ -76,11 +78,27 @@ public partial class MainWindow
             recordingMenu.Items.Add(CreateMenuItem("从头播放", string.Empty, async (_, _) => await PlayDesktopRecordingAsync(recording, 0), exists));
             recordingMenu.Items.Add(CreateMenuItem("在播放位置添加标记", string.Empty, (_, _) => AddCueAtPlaybackPosition(recording), exists && IsCurrentPlayback(recording)));
 
+            var progress = IsCurrentPlayback(recording)
+                ? AudioTimelineService.GetPlaybackProgress(recording, _desktopAudioService.PlaybackPositionMilliseconds)
+                : -1;
+            var waveformMenu = new MenuItem { Header = "波形与跳转", IsEnabled = exists };
+            waveformMenu.Items.Add(new MenuItem
+            {
+                Header = AudioWaveformService.FormatCompact(recording.WaveformPeaks, 32, progress),
+                IsEnabled = false
+            });
+            foreach (var (label, ratio) in new[] { ("从头播放", 0d), ("跳到 25%", .25d), ("跳到 50%", .5d), ("跳到 75%", .75d) })
+            {
+                var offset = (long)Math.Round(recording.DurationMilliseconds * ratio);
+                waveformMenu.Items.Add(CreateMenuItem(label, string.Empty, async (_, _) => await PlayDesktopRecordingAsync(recording, offset), exists));
+            }
+            recordingMenu.Items.Add(waveformMenu);
+
             var cuesMenu = new MenuItem { Header = $"时间标记（{recording.Cues.Count}）", IsEnabled = recording.Cues.Count > 0 };
             foreach (var cue in recording.Cues.OrderBy(item => item.OffsetMilliseconds))
             {
                 var cueCopy = cue;
-                var label = string.IsNullOrWhiteSpace(cue.Label) ? "??" : cue.Label;
+                var label = string.IsNullOrWhiteSpace(cue.Label) ? "时间标记" : cue.Label;
                 cuesMenu.Items.Add(CreateMenuItem(
                     $"{AudioTimelineService.FormatDuration(cue.OffsetMilliseconds)}  {label}",
                     string.Empty,
@@ -90,7 +108,7 @@ public partial class MainWindow
             recordingMenu.Items.Add(cuesMenu);
             recordingMenu.Items.Add(new Separator());
             recordingMenu.Items.Add(CreateMenuItem("重命名", string.Empty, (_, _) => RenameDesktopRecording(recording), !_isReadOnly));
-            recordingMenu.Items.Add(CreateMenuItem("??", string.Empty, (_, _) => DeleteDesktopRecording(recording), !_isReadOnly));
+            recordingMenu.Items.Add(CreateMenuItem("删除", string.Empty, (_, _) => DeleteDesktopRecording(recording), !_isReadOnly));
             menu.Items.Add(recordingMenu);
         }
 
@@ -101,8 +119,9 @@ public partial class MainWindow
     {
         if (_currentNotebook is null || _currentPage is null || _isReadOnly || _desktopAudioService.IsRecording) return;
         EnsureAudioTimelineInitialized();
+        StopDesktopPlayback();
         var page = _currentPage;
-        var recording = AudioTimelineService.AddRecording(page, string.Empty, 0, $"?? {page.AudioRecordings.Count + 1}", mimeType: "audio/wav");
+        var recording = AudioTimelineService.AddRecording(page, string.Empty, 0, $"录音 {page.AudioRecordings.Count + 1}", mimeType: "audio/wav");
         var absolutePath = AudioAttachmentService.PrepareRecordingPath(
             _notebookStorage.NotebooksDirectory,
             _currentNotebook.Id,
@@ -149,9 +168,18 @@ public partial class MainWindow
             }
             else
             {
+                var path = ResolveAudioPath(recording);
+                try
+                {
+                    recording.WaveformPeaks = AudioWaveformService.ExtractWaveform(path).ToList();
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+                {
+                    recording.WaveformPeaks = [];
+                }
                 page.ModifiedAt = DateTimeOffset.Now;
                 MarkDirty();
-            if (showMessage) StatusText.Text = $"录音已保存：{recording.DisplayName} · {AudioTimelineService.FormatDuration(recording.DurationMilliseconds)}";
+                if (showMessage) StatusText.Text = $"录音已保存：{recording.DisplayName} · {AudioTimelineService.FormatDuration(recording.DurationMilliseconds)}";
             }
         }
         catch (Exception exception)
@@ -179,6 +207,8 @@ public partial class MainWindow
         try
         {
             await _desktopAudioService.PlayAsync(path, offsetMilliseconds);
+            _desktopPlayingRecording = recording;
+            UpdateAudioPlaybackHighlight(AudioTimelineService.GetActiveStrokeId(recording, offsetMilliseconds));
             StatusText.Text = $"正在播放：{recording.DisplayName}";
             UpdateAudioTimelineButton();
         }
@@ -234,7 +264,7 @@ public partial class MainWindow
         if (_currentPage is null) return;
         var result = MessageBox.Show(this, $"确定删除“{recording.DisplayName}”吗？音频文件也会被删除。", "删除录音", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result != MessageBoxResult.Yes) return;
-        if (IsCurrentPlayback(recording)) _desktopAudioService.StopPlayback();
+        if (IsCurrentPlayback(recording)) StopDesktopPlayback();
         AudioAttachmentService.TryDelete(_notebookStorage.NotebooksDirectory, recording.LocalFilePath);
         AudioTimelineService.RemoveRecording(_currentPage, recording.Id);
         MarkDirty();
@@ -245,13 +275,13 @@ public partial class MainWindow
     {
         if (_desktopActiveRecording is null || !_desktopAudioService.IsRecording || addedStrokes.Count == 0) return;
         var strokeId = WpfInkAdapter.ToPaperInk(addedStrokes).Strokes.FirstOrDefault()?.Id;
-        AddDesktopAudioCue("??", strokeId);
+        AddDesktopAudioCue("书写", strokeId);
     }
 
     private void StopAudioForContextChange()
     {
         if (_desktopAudioService.IsRecording) StopDesktopRecording(showMessage: false);
-        _desktopAudioService.StopPlayback();
+        StopDesktopPlayback();
         UpdateAudioTimelineButton();
     }
 
@@ -261,6 +291,7 @@ public partial class MainWindow
         _audioStatusTimer.Stop();
         _audioStatusTimer.Tick -= AudioStatusTimer_Tick;
         _desktopAudioService.PlaybackEnded -= DesktopAudioService_PlaybackEnded;
+        UpdateAudioPlaybackHighlight(null);
         _desktopAudioService.Dispose();
     }
 
@@ -276,11 +307,63 @@ public partial class MainWindow
         return !string.IsNullOrWhiteSpace(path) && string.Equals(path, _desktopAudioService.CurrentPlaybackPath, StringComparison.OrdinalIgnoreCase);
     }
 
-    private void AudioStatusTimer_Tick(object? sender, EventArgs e) => UpdateAudioTimelineButton();
+    private void AudioStatusTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_desktopPlayingRecording is not null && (_desktopAudioService.IsPlaying || _desktopAudioService.IsPaused))
+        {
+            var strokeId = AudioTimelineService.GetActiveStrokeId(
+                _desktopPlayingRecording,
+                _desktopAudioService.PlaybackPositionMilliseconds);
+            UpdateAudioPlaybackHighlight(strokeId);
+        }
+        else
+        {
+            UpdateAudioPlaybackHighlight(null);
+        }
+        UpdateAudioTimelineButton();
+    }
+
+    private void StopDesktopPlayback()
+    {
+        _desktopAudioService.StopPlayback();
+        _desktopPlayingRecording = null;
+        UpdateAudioPlaybackHighlight(null);
+        UpdateAudioTimelineButton();
+    }
+
+    private void UpdateAudioPlaybackHighlight(Guid? strokeId)
+    {
+        if (AudioPlaybackHighlight is null) return;
+        if (strokeId is null || _currentPage is null)
+        {
+            _desktopHighlightedStrokeId = null;
+            AudioPlaybackHighlight.Points.Clear();
+            AudioPlaybackHighlight.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var stroke = InkSurface.Strokes.FirstOrDefault(item => WpfInkAdapter.GetStrokeId(item) == strokeId.Value);
+        if (stroke is null || !PageLayerService.IsContentVisible(_currentPage, WpfInkAdapter.GetLayerId(stroke)))
+        {
+            _desktopHighlightedStrokeId = null;
+            AudioPlaybackHighlight.Points.Clear();
+            AudioPlaybackHighlight.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var points = new PointCollection(stroke.StylusPoints.Count + 1);
+        foreach (var point in stroke.StylusPoints) points.Add(new Point(point.X, point.Y));
+        if (points.Count == 1) points.Add(new Point(points[0].X + .1, points[0].Y + .1));
+        _desktopHighlightedStrokeId = strokeId;
+        AudioPlaybackHighlight.Points = points;
+        AudioPlaybackHighlight.Visibility = Visibility.Visible;
+    }
 
     private void DesktopAudioService_PlaybackEnded(object? sender, EventArgs e)
     {
-        StatusText.Text = "已添加书写时间标记。";
+        _desktopPlayingRecording = null;
+        UpdateAudioPlaybackHighlight(null);
+        StatusText.Text = "录音播放结束。";
         UpdateAudioTimelineButton();
     }
 
@@ -289,19 +372,19 @@ public partial class MainWindow
         if (AudioTimelineButton is null) return;
         if (_desktopAudioService.IsRecording)
         {
-            AudioTimelineButton.Content = $"? {AudioTimelineService.FormatDuration(_desktopAudioService.RecordingElapsedMilliseconds)}";
+            AudioTimelineButton.Content = $"录音 {AudioTimelineService.FormatDuration(_desktopAudioService.RecordingElapsedMilliseconds)}";
             AudioTimelineButton.Foreground = Brushes.Firebrick;
         }
         else if (_desktopAudioService.IsPlaying || _desktopAudioService.IsPaused)
         {
-            var icon = _desktopAudioService.IsPaused ? "?" : "?";
+            var icon = _desktopAudioService.IsPaused ? "暂停" : "播放";
             AudioTimelineButton.Content = $"{icon} {AudioTimelineService.FormatDuration(_desktopAudioService.PlaybackPositionMilliseconds)}";
             AudioTimelineButton.Foreground = Brushes.DarkSlateBlue;
         }
         else
         {
             var count = _currentPage?.AudioRecordings?.Count ?? 0;
-        AudioTimelineButton.Content = count > 0 ? $"录音 {count}" : "录音";
+            AudioTimelineButton.Content = count > 0 ? $"录音 {count}" : "录音";
             AudioTimelineButton.ClearValue(ForegroundProperty);
         }
     }
@@ -310,8 +393,8 @@ public partial class MainWindow
     {
         var input = new TextBox { Text = initialValue, Margin = new Thickness(0, 6, 0, 14), MinWidth = 320 };
         input.SelectAll();
-        var ok = new Button { Content = "??", IsDefault = true, MinWidth = 80, Margin = new Thickness(8, 0, 0, 0) };
-        var cancel = new Button { Content = "??", IsCancel = true, MinWidth = 80 };
+        var ok = new Button { Content = "确定", IsDefault = true, MinWidth = 80, Margin = new Thickness(8, 0, 0, 0) };
+        var cancel = new Button { Content = "取消", IsCancel = true, MinWidth = 80 };
         var panel = new StackPanel { Margin = new Thickness(18) };
         panel.Children.Add(new TextBlock { Text = label });
         panel.Children.Add(input);

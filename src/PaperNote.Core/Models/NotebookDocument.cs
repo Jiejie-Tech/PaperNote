@@ -16,7 +16,7 @@ public static class NotebookDefaults
 
 public sealed class NotebookDocument
 {
-    public int FormatVersion { get; set; } = 16;
+    public int FormatVersion { get; set; } = 17;
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = "未命名笔记本";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;

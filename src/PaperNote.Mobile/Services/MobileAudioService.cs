@@ -17,6 +17,18 @@ public sealed class MobileAudioService : IDisposable
     public long RecordingElapsedMilliseconds => _recordingClock.ElapsedMilliseconds;
     public long PlaybackPositionMilliseconds => _player?.CurrentPosition ?? 0;
     public long PlaybackDurationMilliseconds => _player?.Duration ?? 0;
+    public float RecordingAmplitude
+    {
+        get
+        {
+            try
+            {
+                var raw = _recorder?.MaxAmplitude ?? 0;
+                return Math.Clamp((float)Math.Sqrt(raw / 32767d), 0f, 1f);
+            }
+            catch { return 0; }
+        }
+    }
 
     public async Task<bool> EnsurePermissionAsync()
     {

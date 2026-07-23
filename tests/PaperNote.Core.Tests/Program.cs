@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using PaperNote.Core.Ink;
@@ -336,7 +336,7 @@ try
     document.Pages[0].Objects.Add(new PageObject { Kind = "Text", Text = "矩阵分解与特征值" });
     var stored = await storage.CreateAsync(document);
     var loaded = await storage.LoadAsync(stored.FilePath);
-    Assert(loaded.FormatVersion == 16 && loaded.Pages[0].Ink.Strokes.Count == 2, "保存后应使用格式 16 并保留 PaperInk");
+    Assert(loaded.FormatVersion == 17 && loaded.Pages[0].Ink.Strokes.Count == 2, "保存后应使用格式 17 并保留 PaperInk");
     Assert(NotebookContentService.TryMatch(loaded, "特征值", out var summary) && summary.Length > 0, "全局搜索应匹配文本对象");
 
     loaded.Tags = ["数学", "复习"];
@@ -366,6 +366,36 @@ var recording = AudioTimelineService.AddRecording(secondPage, "", 10_000, "课�
     recording.LocalFilePath = audioRelativePath;
     recording.FileSize = audioBytes.LongLength;
 Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTimelineService.GetCues(secondPage, 1_100).Count == 1, "audio timeline should deduplicate nearby cues");
+    var timelineStrokeId = Guid.NewGuid();
+    var timelineRecording = new AudioRecording { DurationMilliseconds = 5_000 };
+    Assert(AudioTimelineService.AddCue(timelineRecording, 1_000, timelineStrokeId, "关联笔迹"), "录音时间轴应能关联笔迹");
+    Assert(AudioTimelineService.GetActiveStrokeId(timelineRecording, 1_800) == timelineStrokeId, "时间标记后的高亮保持期内应返回关联笔迹");
+    Assert(AudioTimelineService.GetActiveStrokeId(timelineRecording, 999) is null, "时间标记前不应提前高亮笔迹");
+    Assert(AudioTimelineService.GetActiveStrokeId(timelineRecording, 2_500) is null, "超过高亮保持期后应清除关联笔迹");
+    Assert(Math.Abs(AudioTimelineService.GetPlaybackProgress(timelineRecording, 2_500) - .5) < .001, "录音播放进度应归一化到 0 至 1");
+    Assert(AudioTimelineService.FormatDuration(4_000) == "0:04" && AudioTimelineService.FormatDuration(3_700_000) == "1:01:40", "录音时长格式应稳定显示分钟和小时");
+
+    using (var waveformStream = new MemoryStream(CreatePcm16Wave([0, 2_000, -8_000, 16_000, -30_000, 0], sampleRate: 8_000)))
+    {
+        var peaks = AudioWaveformService.ExtractWaveform(waveformStream, 16);
+        Assert(peaks.Count > 0 && peaks.All(value => value is >= 0 and <= 1), "PCM16 WAV 应生成归一化本地波形");
+        Assert(peaks.Max() > .9f, "WAV 波形应保留明显峰值");
+    }
+    using (var silenceStream = new MemoryStream(CreatePcm16Wave(new short[64], sampleRate: 8_000)))
+        Assert(AudioWaveformService.ExtractWaveform(silenceStream, 16).All(value => value == 0), "静音 WAV 波形不应报错");
+    using (var invalidWaveformStream = new MemoryStream(Encoding.UTF8.GetBytes("not-wave")))
+        Assert(AudioWaveformService.ExtractWaveform(invalidWaveformStream).Count == 0, "非 WAV 数据应安全返回空波形");
+    var compactRecording = new AudioRecording();
+    for (var index = 0; index < AudioWaveformService.MaximumStoredPeakCount + 100; index++)
+        AudioWaveformService.AppendSample(compactRecording, index % 5 / 4f);
+    Assert(compactRecording.WaveformPeaks.Count <= AudioWaveformService.MaximumStoredPeakCount, "长录音波形应自动压缩到本地存储上限");
+    Assert(AudioWaveformService.FormatCompact([0, .5f, 1], 8, .5).Contains('◆'), "紧凑波形应显示播放位置");
+
+    recording.WaveformPeaks = [float.NaN, -1, .5f, 2, float.PositiveInfinity];
+    await storage.SaveAsync(loaded, stored.FilePath);
+    var audioRoundTrip = await storage.LoadAsync(stored.FilePath);
+    var roundTripRecording = audioRoundTrip.Pages.SelectMany(page => page.AudioRecordings).Single(item => item.Id == recording.Id);
+    Assert(roundTripRecording.WaveformPeaks.SequenceEqual(new[] { 0f, .5f, 1f }), "格式 17 应往返保存并修复非法波形峰值");
     var encryption = new NotebookEncryptionService();
     var encrypted = encryption.Encrypt(loaded, "correct horse battery");
     Assert(NotebookEncryptionService.IsEncrypted(encrypted) && encryption.Decrypt(encrypted, "correct horse battery").Title == loaded.Title, "笔记本加密应可往返");
@@ -590,7 +620,7 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
 
         var studyStored = await studyStorage.CreateAsync(studyDocument);
         var studyLoaded = await studyStorage.LoadAsync(studyStored.FilePath);
-        Assert(studyLoaded.FormatVersion == 16, "PDF 学习资料应保存为格式 16");
+        Assert(studyLoaded.FormatVersion == 17, "PDF 学习资料应保存为格式 17");
         Assert(studyLoaded.OutlineEntries.Count == 1 && studyLoaded.OutlineEntries[0].Level == 6, "PDF 目录层级应规范化并往返保存");
         Assert(studyLoaded.Pages[0].BackgroundSourceFingerprint == "fixture-sha256" && studyLoaded.Pages[0].PdfText.Contains("eigenvalue lesson", StringComparison.Ordinal), "PDF 指纹和文本层应往返保存");
         Assert(studyLoaded.Pages[0].PdfLinks.Count == 1 && studyLoaded.Pages[0].PdfLinks[0].X == 0 && studyLoaded.Pages[0].PdfLinks[0].Y == 0 && studyLoaded.Pages[0].PdfLinks[0].Width == 1 && studyLoaded.Pages[0].PdfLinks[0].Height == 1, "非法 PDF 链接坐标应限制到页面范围");
@@ -650,6 +680,64 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
         Assert(attachedDocument.OutlineEntries.Any(entry => entry.TargetPageId == attachedOne.Id && entry.IsImported), "PDF 原目录应写入跨平台笔记格式");
     }
 
+    var assistedLine = new PaperInkStroke
+    {
+        Points =
+        [
+            new PaperInkPoint { X = 10, Y = 20 }, new PaperInkPoint { X = 55, Y = 23 }, new PaperInkPoint { X = 110, Y = 25 }
+        ]
+    };
+    Assert(GeometryAssistService.NormalizeStroke(assistedLine) == GeometryAssistResult.Line, "Geometry assist should recognize a deliberate line");
+    Assert(assistedLine.Points.Count == 2 && Math.Abs(assistedLine.Points[0].Y - assistedLine.Points[1].Y) < .01, "Geometry line should snap horizontally");
+
+    var assistedRectangle = new PaperInkStroke
+    {
+        Points =
+        [
+            new PaperInkPoint { X = 20, Y = 20 }, new PaperInkPoint { X = 70, Y = 21 }, new PaperInkPoint { X = 120, Y = 20 },
+            new PaperInkPoint { X = 121, Y = 60 }, new PaperInkPoint { X = 120, Y = 100 }, new PaperInkPoint { X = 70, Y = 101 },
+            new PaperInkPoint { X = 20, Y = 100 }, new PaperInkPoint { X = 19, Y = 60 }, new PaperInkPoint { X = 20, Y = 20 }
+        ]
+    };
+    Assert(GeometryAssistService.NormalizeStroke(assistedRectangle) == GeometryAssistResult.Rectangle, "Geometry assist should recognize a rough rectangle");
+    Assert(assistedRectangle.Points.Count == 5, "Recognized rectangle should be normalized to four corners");
+    var selectionStrokeId = Guid.NewGuid();
+    var ignoredStrokeId = Guid.NewGuid();
+    var selectionGroupId = Guid.NewGuid();
+    var selectionExportPage = new NotebookPage
+    {
+        Title = "选区测试",
+        Ink = new PaperInkDocument
+        {
+            Strokes =
+            [
+                new PaperInkStroke
+                {
+                    Id = selectionStrokeId, Width = 12, LayerId = null,
+                    Points = [new PaperInkPoint { X = 100, Y = 100 }, new PaperInkPoint { X = 220, Y = 140 }]
+                },
+                new PaperInkStroke
+                {
+                    Id = ignoredStrokeId,
+                    Points = [new PaperInkPoint { X = 700, Y = 900 }, new PaperInkPoint { X = 720, Y = 920 }]
+                }
+            ]
+        },
+        Objects =
+        [
+            new PageObject { Id = Guid.NewGuid(), Kind = "Shape", X = 250, Y = 120, Width = 100, Height = 60, Rotation = 45, GroupId = selectionGroupId },
+            new PageObject { Id = Guid.NewGuid(), Kind = "Text", Text = "同组选区", X = 360, Y = 130, Width = 100, Height = 40, GroupId = selectionGroupId },
+            new PageObject { Id = Guid.NewGuid(), Kind = "Text", Text = "不要导出", X = 700, Y = 950, Width = 80, Height = 30 }
+        ]
+    };
+    var selectedObjectId = selectionExportPage.Objects[0].Id;
+    var selectionExport = SelectionExportService.Create(selectionExportPage, [selectionStrokeId], [selectedObjectId]);
+    Assert(selectionExport is not null && selectionExport.HasContent, "混合选区应生成离线导出快照");
+    Assert(selectionExport!.Page.Ink.Strokes.Count == 1 && selectionExport.Page.Ink.Strokes[0].Id == selectionStrokeId, "选区导出只应保留选中的笔迹");
+    Assert(selectionExport.Page.Objects.Count == 2 && selectionExport.Page.Objects.All(item => item.GroupId == selectionGroupId), "选区导出应展开同组对象并排除未选内容");
+    Assert(selectionExport.Width > 350 && selectionExport.Height > 100, "选区边界应包含笔宽、对象旋转和导出边距");
+    Assert(SelectionExportService.Create(selectionExportPage, [], []) is null, "空选区不应生成导出文件");
+
     Console.WriteLine("PAPERNOTE CORE TESTS PASS");
 }
 finally
@@ -699,6 +787,28 @@ static byte[] CreatePdfContentFixture()
     return output.ToArray();
 }
 
+static byte[] CreatePcm16Wave(IReadOnlyList<short> samples, int sampleRate)
+{
+    using var stream = new MemoryStream();
+    using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
+    var dataLength = samples.Count * sizeof(short);
+    writer.Write(Encoding.ASCII.GetBytes("RIFF"));
+    writer.Write(36 + dataLength);
+    writer.Write(Encoding.ASCII.GetBytes("WAVE"));
+    writer.Write(Encoding.ASCII.GetBytes("fmt "));
+    writer.Write(16);
+    writer.Write((short)1);
+    writer.Write((short)1);
+    writer.Write(sampleRate);
+    writer.Write(sampleRate * sizeof(short));
+    writer.Write((short)sizeof(short));
+    writer.Write((short)16);
+    writer.Write(Encoding.ASCII.GetBytes("data"));
+    writer.Write(dataLength);
+    foreach (var sample in samples) writer.Write(sample);
+    writer.Flush();
+    return stream.ToArray();
+}
 static void Assert(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);

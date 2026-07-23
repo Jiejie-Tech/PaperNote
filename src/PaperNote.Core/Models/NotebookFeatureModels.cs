@@ -21,12 +21,14 @@ public sealed class AudioRecording
     public long FileSize { get; set; }
     public string MimeType { get; set; } = "audio/mp4";
     public List<AudioCue> Cues { get; set; } = [];
+    public List<float> WaveformPeaks { get; set; } = [];
 
     public AudioRecording Clone() => new()
     {
         Id = Id, LocalFilePath = LocalFilePath, DisplayName = DisplayName, CreatedAt = CreatedAt,
         DurationMilliseconds = DurationMilliseconds, FileSize = FileSize, MimeType = MimeType,
-        Cues = Cues.Select(cue => cue.Clone()).ToList()
+        Cues = Cues.Select(cue => cue.Clone()).ToList(),
+        WaveformPeaks = WaveformPeaks.ToList()
     };
 }
 
