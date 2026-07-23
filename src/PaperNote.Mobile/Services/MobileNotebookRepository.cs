@@ -15,10 +15,12 @@ public sealed class MobileNotebookRepository
             Path.Combine(root, "Notebooks"),
             Path.Combine(root, "Backups"));
         TemplateLibrary = new PaperTemplateLibraryService(Path.Combine(root, "paper-templates.json"));
+        MaterialLibrary = new SelectionMaterialLibraryService(Path.Combine(root, "selection-materials.json"));
     }
 
     public NotebookStorageService Storage { get; }
     public PaperTemplateLibraryService TemplateLibrary { get; }
+    public SelectionMaterialLibraryService MaterialLibrary { get; }
     public IReadOnlyList<StoredNotebook> Notebooks { get; private set; } = [];
     public StoredNotebook? Current { get; private set; }
     public IReadOnlyList<NotebookRecoveryResult> LastRecoveryResults { get; private set; } = [];

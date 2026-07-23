@@ -83,6 +83,9 @@ internal static class Program
             Assert(window.FindName("LaserPointerTrail") is System.Windows.Shapes.Polyline, "The Windows page should expose a transient laser trail overlay.");
             Assert(window.GetType().GetMethod("TogglePresentationMode", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Presentation mode handler should exist.");
             Assert(window.GetType().GetMethod("JumpSelectedInkToAudio", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Selected ink should expose reverse audio navigation.");
+            Assert(window.GetType().GetMethod("SaveMixedSelectionAsMaterialAsync", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Mixed selections should be saveable to the personal material library.");
+            Assert(window.GetType().GetMethod("InsertSelectionMaterial", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Personal materials should be insertable as editable content.");
+            Assert(GetField<SelectionMaterialLibraryService>(window, "_selectionMaterialLibraryService") is not null, "The Windows editor should initialize the local personal material library.");
 
             SetField(window, "_currentNotebookPassword", "background test password");
             Invoke(window, "UpdateNotebookProtectionButton");

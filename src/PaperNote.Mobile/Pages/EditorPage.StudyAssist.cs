@@ -12,7 +12,7 @@ public sealed partial class EditorPage
     {
         if (_page is null) return;
         var choice = await DisplayActionSheetAsync("课堂与复习工具", "取消", null,
-            "添加胶带遮挡", "常用元素", "激光笔", _mobilePresentationMode ? "退出演示模式" : "进入演示模式");
+            "添加胶带遮挡", "常用元素", "我的素材", "激光笔", _mobilePresentationMode ? "退出演示模式" : "进入演示模式");
         switch (choice)
         {
             case "添加胶带遮挡":
@@ -20,6 +20,9 @@ public sealed partial class EditorPage
                 break;
             case "常用元素":
                 await AddStudyElementAsync();
+                break;
+            case "我的素材":
+                await ShowSelectionMaterialsAsync();
                 break;
             case "激光笔":
                 SelectTool(InkCanvasTool.Laser);
@@ -70,6 +73,82 @@ public sealed partial class EditorPage
         _canvas.SelectObject(objects[^1].Id);
         ScheduleSave();
     }
+
+    private async Task SaveSelectionAsMaterialAsync()
+    {
+        if (_page is null || _canvas.SelectedContentCount == 0) return;
+        var materials = (await _repository.MaterialLibrary.LoadAsync()).ToList();
+        if (materials.Count >= SelectionMaterialLibraryService.MaximumMaterials)
+        {
+            await DisplayAlertAsync("素材库已满", $"个人素材库最多保存 {SelectionMaterialLibraryService.MaximumMaterials} 项，请先到“课堂与复习工具 → 我的素材”删除不需要的素材。", "知道了");
+            return;
+        }
+
+        var defaultName = $"个人素材 {DateTime.Now:MM-dd HHmm}";
+        var name = await DisplayPromptAsync("保存到个人素材库", "素材名称", initialValue: defaultName, maxLength: 60, keyboard: Keyboard.Text);
+        if (name is null) return;
+        var material = SelectionMaterialLibraryService.Create(name, _page, _canvas.SelectedStrokeIds, _canvas.SelectedObjectIds);
+        if (material is null)
+        {
+            await DisplayAlertAsync("无法保存素材", "当前选区没有可保存的内容。", "知道了");
+            return;
+        }
+
+        materials.Insert(0, material);
+        await _repository.MaterialLibrary.SaveAsync(materials);
+        _pageStatus.Text = $"已保存到个人素材库：{material.Name}";
+    }
+
+    private async Task ShowSelectionMaterialsAsync()
+    {
+        var materials = (await _repository.MaterialLibrary.LoadAsync()).ToArray();
+        if (materials.Length == 0)
+        {
+            await DisplayAlertAsync("我的素材", "素材库还是空的。先用套索选中笔迹、文字、图片或形状，再从“更多”中保存到个人素材库。", "知道了");
+            return;
+        }
+
+        var labels = materials.Select((material, index) => $"{index + 1}. {SelectionMaterialDisplayName(material)}").ToArray();
+        var choice = await DisplayActionSheetAsync($"我的素材 · {materials.Length}/{SelectionMaterialLibraryService.MaximumMaterials}", "取消", null, labels);
+        var selectedIndex = Array.IndexOf(labels, choice);
+        if (selectedIndex < 0) return;
+        var selected = materials[selectedIndex];
+        var action = await DisplayActionSheetAsync(selected.Name, "取消", null, "插入当前页", "删除素材");
+        switch (action)
+        {
+            case "插入当前页":
+                InsertSelectionMaterial(selected);
+                break;
+            case "删除素材":
+                if (!await DisplayAlertAsync("删除素材", $"确定删除“{selected.Name}”吗？这不会删除已经插入笔记的内容。", "删除", "取消")) return;
+                await _repository.MaterialLibrary.SaveAsync(materials.Where(item => item.Id != selected.Id));
+                _pageStatus.Text = $"已删除个人素材：{selected.Name}";
+                break;
+        }
+    }
+
+    private void InsertSelectionMaterial(SelectionMaterial material)
+    {
+        if (_page is null) return;
+        var layerId = PageLayerService.EnsureDefault(_page).Id;
+        var placement = SelectionMaterialLibraryService.Instantiate(material, x: 150, y: 230, maximumWidth: 520, maximumHeight: 560, layerId: layerId);
+        if (placement.Strokes.Count == 0 && placement.Objects.Count == 0) return;
+
+        _page.Ink.Strokes.AddRange(placement.Strokes);
+        _page.Objects.AddRange(placement.Objects);
+        _page.ModifiedAt = DateTimeOffset.Now;
+        _canvas.Page = null;
+        _canvas.Page = _page;
+        _canvas.Document = _page.Ink;
+        SelectTool(InkCanvasTool.Select);
+        if (placement.Objects.Count > 0) _canvas.SelectObject(placement.Objects[^1].Id);
+        UpdatePageStatus();
+        ScheduleSave();
+        _pageStatus.Text = $"已插入个人素材：{material.Name}";
+    }
+
+    private static string SelectionMaterialDisplayName(SelectionMaterial material)
+        => $"{material.Name} · {material.Strokes.Count} 笔迹/{material.Objects.Count} 对象";
 
     private async Task JumpSelectedStrokeToAudioAsync()
     {

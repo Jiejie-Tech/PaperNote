@@ -784,6 +784,44 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
     Assert(selectionExport.Width > 350 && selectionExport.Height > 100, "选区边界应包含笔宽、对象旋转和导出边距");
     Assert(SelectionExportService.Create(selectionExportPage, [], []) is null, "空选区不应生成导出文件");
 
+    var materialSourceLink = Guid.NewGuid();
+    selectionExportPage.Objects[0].LinkTargetPageId = materialSourceLink;
+    selectionExportPage.Objects[0].IsLocked = true;
+    var material = SelectionMaterialLibraryService.Create("  Classroom Formula  ", selectionExportPage, [selectionStrokeId], [selectedObjectId]);
+    Assert(material is not null && material.Name == "Classroom Formula", "Personal materials should trim their names and preserve mixed selections");
+    Assert(material!.Strokes.Count == 1 && material.Objects.Count == 2, "Personal materials should keep selected ink and expand grouped objects");
+    Assert(material.Strokes.SelectMany(item => item.Points).All(point => point.X >= 0 && point.Y >= 0), "Material coordinates should be normalized to the selection bounds");
+    Assert(material.Objects.All(item => item.LayerId is null && item.LinkTargetPageId is null && !item.IsLocked), "Materials should not retain page layers, page links, or locked state");
+    Assert(SelectionMaterialLibraryService.Create("Empty", selectionExportPage, [], []) is null, "An empty selection should not create a material");
+
+    var materialLayer = Guid.NewGuid();
+    var firstPlacement = SelectionMaterialLibraryService.Instantiate(material, x: 40, y: 60, maximumWidth: 120, maximumHeight: 90, layerId: materialLayer);
+    var secondPlacement = SelectionMaterialLibraryService.Instantiate(material, x: 80, y: 100, maximumWidth: 120, maximumHeight: 90, layerId: materialLayer);
+    Assert(firstPlacement.Strokes.Count == 1 && firstPlacement.Objects.Count == 2, "Materials should instantiate as editable ink and objects");
+    Assert(firstPlacement.Strokes.All(item => item.LayerId == materialLayer) && firstPlacement.Objects.All(item => item.LayerId == materialLayer), "Inserted materials should use the active layer");
+    Assert(firstPlacement.Strokes[0].Id != material.Strokes[0].Id && firstPlacement.Strokes[0].Id != secondPlacement.Strokes[0].Id, "Each insertion should allocate fresh stroke IDs");
+    Assert(firstPlacement.Objects.Select(item => item.Id).Intersect(material.Objects.Select(item => item.Id)).Count() == 0, "Inserted objects should receive fresh IDs");
+    Assert(firstPlacement.Objects.All(item => item.LinkTargetPageId is null && !item.IsLocked), "Cross-notebook insertion should not restore links or locks");
+    Assert(firstPlacement.Objects.Select(item => item.GroupId).Distinct().Count() == 1 && firstPlacement.Objects[0].GroupId != material.Objects[0].GroupId, "Insertion should preserve grouping while remapping the group ID");
+    Assert(firstPlacement.Objects[0].GroupId != secondPlacement.Objects[0].GroupId, "Repeated insertion should not reuse group IDs");
+    Assert(firstPlacement.Objects.Max(item => item.Width) < material.Objects.Max(item => item.Width), "Oversized materials should scale down to the placement bounds");
+
+    var materialPath = Path.Combine(root, "materials", "selection-materials.json");
+    var materialLibrary = new SelectionMaterialLibraryService(materialPath);
+    await materialLibrary.SaveAsync([material]);
+    var loadedMaterials = await materialLibrary.LoadAsync();
+    Assert(loadedMaterials.Count == 1 && loadedMaterials[0].Name == "Classroom Formula" && loadedMaterials[0].Objects.Count == 2, "The material library should save atomically and reload all content");
+    Assert(!File.Exists(materialPath + ".tmp"), "A successful material save should not leave its temporary file");
+    await File.WriteAllTextAsync(materialPath, "{ damaged json");
+    Assert((await materialLibrary.LoadAsync()).Count == 0, "A damaged material library should safely load as empty");
+    var overflowMaterials = Enumerable.Range(0, SelectionMaterialLibraryService.MaximumMaterials + 5)
+        .Select(index => new SelectionMaterial
+        {
+            Name = $"Material {index}",
+            Strokes = [new PaperInkStroke { Points = [new PaperInkPoint { X = index, Y = index }] }]
+        });
+    Assert(SelectionMaterialLibraryService.Normalize(overflowMaterials).Count == SelectionMaterialLibraryService.MaximumMaterials, "The material library should enforce its item limit");
+
     var studyTape = StudyAssistService.CreateTape();
     Assert(studyTape.Kind == "Shape" && studyTape.ShapeKind == "Tape" && studyTape.Opacity < 1, "Study tape should be a movable translucent page object");
     Assert(StudyAssistService.CreateElement("Important").Single().Kind == "Text", "Study element library should create reusable page objects");

@@ -127,6 +127,8 @@ public partial class MainWindow : Window
             if (_isCloseRequested || _isClosed) return;
             await InitializeSharedPaperTemplatesAsync();
             if (_isCloseRequested || _isClosed) return;
+            await InitializeSelectionMaterialsAsync();
+            if (_isCloseRequested || _isClosed) return;
             ShowLibrary();
         }
         catch (Exception exception)

@@ -509,6 +509,7 @@ public sealed partial class EditorPage : ContentPage
 
         if (selectedContentCount > 0)
         {
+            actions.Add("保存到个人素材库");
             if (selectedObjectCount == 1 && selectedStrokeCount == 0 && selected?.Kind == "Text") actions.Add("编辑选中文字");
             if (selectedObjectCount > 1) actions.Add("组合选中对象");
             if (selectedItems.Any(item => item.GroupId is not null)) actions.Add("取消组合");
@@ -568,6 +569,7 @@ public sealed partial class EditorPage : ContentPage
                 else if (inkType == "荧光笔") _canvas.UpdateSelectionStyle(inkTool: PaperInkTool.Highlighter);
                 break;
             case "跳到关联录音": await JumpSelectedStrokeToAudioAsync(); break;
+            case "保存到个人素材库": await SaveSelectionAsMaterialAsync(); break;
             case "复制选中内容": _canvas.DuplicateSelection(); break;
             case "导出选区为 PNG":
                 await _pdf.ExportSelectionAndShareAsync(_page, _canvas.SelectedStrokeIds, _canvas.SelectedObjectIds);

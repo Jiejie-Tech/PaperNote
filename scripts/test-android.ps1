@@ -84,7 +84,13 @@ $sourceAssertions=@(
   @{Path='src\PaperNote.Mobile\Services\MobileNotebookRepository.cs';Pattern='SaveEncryptedAsync';Label='encrypted autosave'},
   @{Path='src\PaperNote.Mobile\Services\MobileNotebookRepository.cs';Pattern='LoadEncryptedAsync';Label='encrypted notebook unlock'},
   @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='启用密码保护';Label='password protection menu'},
-  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='管理密码保护';Label='password management menu'}
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='管理密码保护';Label='password management menu'},
+  @{Path='src\PaperNote.Core\Services\SelectionMaterialLibraryService.cs';Pattern='public sealed class SelectionMaterialLibraryService';Label='shared personal material library'},
+  @{Path='src\PaperNote.Mobile\Services\MobileNotebookRepository.cs';Pattern='selection-materials.json';Label='local Android personal material storage'},
+  @{Path='src\PaperNote.Mobile\Services\MobileNotebookRepository.cs';Pattern='MaterialLibrary';Label='Android material repository'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='SaveSelectionAsMaterialAsync';Label='Android save selection as material entry'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.StudyAssist.cs';Pattern='ShowSelectionMaterialsAsync';Label='Android personal material menu'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.StudyAssist.cs';Pattern='SelectionMaterialLibraryService.Instantiate';Label='Android editable material insertion'}
 )
 foreach($assertion in $sourceAssertions){
   $path=Join-Path $environment.RepoRoot $assertion.Path
