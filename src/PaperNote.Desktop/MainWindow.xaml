@@ -1,4 +1,4 @@
-<Window x:Class="PaperNote.Desktop.MainWindow"
+﻿<Window x:Class="PaperNote.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -380,7 +380,7 @@
                         <Button x:Name="UndoButton" Style="{StaticResource ToolbarButtonStyle}" Click="Undo_Click" ToolTip="撤销 (Ctrl+Z)" IsEnabled="False"><TextBlock Text="↶" FontSize="24" /></Button>
                         <Button x:Name="RedoButton" Style="{StaticResource ToolbarButtonStyle}" Click="Redo_Click" ToolTip="重做 (Ctrl+Y)" IsEnabled="False"><TextBlock Text="↷" FontSize="24" /></Button>
                     </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                    <StackPanel x:Name="WritingToolsPanel" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
                         <RadioButton x:Name="PenTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="笔" Tag="Pen" IsChecked="True" Checked="Tool_Checked" />
                         <Button x:Name="PenSettingsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="62" Padding="7,0" Click="PenSettings_Click" ToolTip="笔型、压感、平滑和快捷笔预设">钢笔⌄</Button>
                         <RadioButton x:Name="HighlighterTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="荧光笔" Tag="Highlighter" Checked="Tool_Checked" />
@@ -389,7 +389,7 @@
                         <RadioButton x:Name="PanTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="浏览" Tag="Pan" Checked="Tool_Checked" />
                         <RadioButton x:Name="LaserTool" AutomationProperties.AutomationId="LaserPointerTool" GroupName="InkTools" Style="{StaticResource ToolRadioStyle}" Content="激光" Tag="Laser" Checked="Tool_Checked" />
                     </StackPanel>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <StackPanel x:Name="InsertToolsPanel" Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="纸张" VerticalAlignment="Center" Margin="8,0,6,0" Foreground="#6B7280" />
                         <ComboBox x:Name="PaperTemplateCombo" Width="82" Height="32" SelectedIndex="1" SelectionChanged="PaperTemplateCombo_SelectionChanged" ToolTip="当前页纸张模板">
                             <ComboBoxItem Content="空白" Tag="Blank" />
@@ -410,13 +410,14 @@
                         <Button x:Name="ShapeActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="52" Padding="7,0" Click="ShapeActions_Click" ToolTip="插入矩形、圆形、三角形、菱形、箭头等">形状⌄</Button>
                         <Button x:Name="TextActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="52" Padding="7,0" Click="TextActions_Click" ToolTip="复制或导出当前笔记中的可提取文字">文字⌄</Button>
                         <Button x:Name="StudyAssistButton" AutomationProperties.AutomationId="StudyAssistButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="68" Padding="7,0" Click="StudyAssist_Click" ToolTip="胶带遮挡、常用元素和演示模式">课堂⌄</Button>
+                        <Button x:Name="AdvancedOfflineToolsButton" AutomationProperties.AutomationId="AdvancedOfflineToolsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="72" Padding="7,0" Click="AdvancedOfflineTools_Click" ToolTip="PDF 表单、公式、本地扩展、资源包、合并与阅读视图">高级⌄</Button>
                         <Button x:Name="SharedPaperTemplatesButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="68" Padding="7,0" Click="SharedPaperTemplates_Click" ToolTip="跨笔记保存和复用自定义纸张">模板库⌄</Button>
 <Button x:Name="SelectionActionsButton" Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="SelectionActions_Click" ToolTip="套索筛选、批量样式、旋转和跨页操作">选区⌄</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectActions_Click" ToolTip="复制、组合和层级操作">对象⌄</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectStyles_Click" ToolTip="修改文字、形状和图片样式">样式⌄</Button>
                         <Button Style="{StaticResource ToolbarButtonStyle}" Height="32" MinWidth="48" Padding="7,0" Click="ObjectArrange_Click" ToolTip="对齐、分布、旋转、层级和锁定对象">排列⌄</Button>
                     </StackPanel>
-                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel x:Name="InkStylePanel" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="粗细" VerticalAlignment="Center" Margin="10,0,4,0" Foreground="#6B7280" />
                         <Slider x:Name="ThicknessSlider" Width="112" Minimum="1" Maximum="20" Value="3.2" VerticalAlignment="Center" ValueChanged="ThicknessSlider_ValueChanged" />
                         <TextBlock x:Name="ThicknessText" Text="3.2" Width="34" VerticalAlignment="Center" Margin="6,0,8,0" Foreground="#4B5563" />

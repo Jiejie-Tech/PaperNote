@@ -16,7 +16,7 @@ public static class NotebookDefaults
 
 public sealed class NotebookDocument
 {
-    public int FormatVersion { get; set; } = 17;
+    public int FormatVersion { get; set; } = 19;
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = "未命名笔记本";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
@@ -76,8 +76,14 @@ public sealed class NotebookPage
     public List<PageObject> Objects { get; set; } = [];
     public List<string> Tags { get; set; } = [];
     public string OcrText { get; set; } = string.Empty;
+    public List<RecognitionTextBlock> OcrBlocks { get; set; } = [];
+    public double OcrAverageConfidence { get; set; }
+    public DateTimeOffset? OcrUpdatedAt { get; set; }
+    public bool OcrNeedsReview { get; set; }
     public string RecognizedText { get; set; } = string.Empty;
     public string PdfText { get; set; } = string.Empty;
+    public List<PdfTextBlock> PdfTextBlocks { get; set; } = [];
+    public double PdfPixelsPerMillimeter { get; set; } = 4;
     public List<PdfPageLink> PdfLinks { get; set; } = [];
     public List<PageComment> Comments { get; set; } = [];
     public List<PageLayer> Layers { get; set; } = [];
@@ -109,7 +115,10 @@ public sealed class NotebookPage
             BackgroundCropRight = BackgroundCropRight,
             BackgroundCropBottom = BackgroundCropBottom,
             Objects = Objects.Select(item => item.Clone()).ToList(),
-            Tags = Tags.ToList(), OcrText = OcrText, RecognizedText = RecognizedText, PdfText = PdfText,
+            Tags = Tags.ToList(), OcrText = OcrText, OcrBlocks = OcrBlocks.Select(block => block.Clone()).ToList(),
+            OcrAverageConfidence = OcrAverageConfidence, OcrUpdatedAt = OcrUpdatedAt, OcrNeedsReview = OcrNeedsReview,
+            RecognizedText = RecognizedText, PdfText = PdfText,
+            PdfTextBlocks = PdfTextBlocks.Select(block => block.Clone()).ToList(), PdfPixelsPerMillimeter = PdfPixelsPerMillimeter,
             PdfLinks = PdfLinks.Select(link => link.Clone()).ToList(), Comments = Comments.Select(comment => comment.Clone()).ToList(),
             Layers = Layers.Select(layer => layer.Clone()).ToList(), ActiveLayerId = ActiveLayerId,
             AudioRecordings = AudioRecordings.Select(recording => recording.Clone()).ToList()
@@ -164,6 +173,13 @@ public sealed class PageObject
     public Guid? LinkTargetPageId { get; set; }
     public Guid? LayerId { get; set; }
     public bool IsHidden { get; set; }
+    public string AltText { get; set; } = string.Empty;
+    public string FormulaLatex { get; set; } = string.Empty;
+    public string FormFieldName { get; set; } = string.Empty;
+    public string FormFieldKind { get; set; } = string.Empty;
+    public string FormFieldValue { get; set; } = string.Empty;
+    public bool FormFieldRequired { get; set; }
+    public bool FormFieldChecked { get; set; }
 
     public PageObject Clone()
     {
@@ -187,7 +203,14 @@ public sealed class PageObject
             GroupId = GroupId,
             LinkTargetPageId = LinkTargetPageId,
             LayerId = LayerId,
-            IsHidden = IsHidden
+            IsHidden = IsHidden,
+            AltText = AltText,
+            FormulaLatex = FormulaLatex,
+            FormFieldName = FormFieldName,
+            FormFieldKind = FormFieldKind,
+            FormFieldValue = FormFieldValue,
+            FormFieldRequired = FormFieldRequired,
+            FormFieldChecked = FormFieldChecked
         };
     }
 }

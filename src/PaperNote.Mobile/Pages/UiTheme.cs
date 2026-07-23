@@ -17,7 +17,9 @@ internal static class UiTheme
             Text = text,
             FontSize = 14,
             FontAttributes = FontAttributes.Bold,
-            HeightRequest = 44,
+            HeightRequest = 48,
+            MinimumHeightRequest = 48,
+            MinimumWidthRequest = 48,
             Padding = new Thickness(16, 8),
             CornerRadius = 13,
             BackgroundColor = primary ? Accent : Surface,
@@ -25,11 +27,19 @@ internal static class UiTheme
             BorderColor = primary ? Accent : Border,
             BorderWidth = 1
         };
+        Describe(button, text, "双击执行");
         if (clicked is not null) button.Clicked += clicked;
         return button;
     }
 
-    public static Border Card(View content) => new()
+    public static T Describe<T>(T view, string description, string? hint = null) where T : View
+    {
+        SemanticProperties.SetDescription(view, description);
+        if (!string.IsNullOrWhiteSpace(hint)) SemanticProperties.SetHint(view, hint);
+        return view;
+    }
+
+    public static Border Card(View content) => Describe(new Border
     {
         Content = content,
         BackgroundColor = Surface,
@@ -37,5 +47,5 @@ internal static class UiTheme
         StrokeThickness = 1,
         Padding = 16,
         StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = 18 }
-    };
+    }, "内容卡片");
 }

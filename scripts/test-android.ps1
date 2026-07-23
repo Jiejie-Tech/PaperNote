@@ -6,7 +6,7 @@ Set-StrictMode -Version Latest
 & (Join-Path $PSScriptRoot 'check-text-integrity.ps1')
 $environment=Get-PaperNoteAndroidEnvironment
 $sourceAssertions=@(
-  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='AddTool(toolRow, InkCanvasTool.Select';Label='select tool'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='AddTool(_toolRow, InkCanvasTool.Select';Label='select tool'},
   @{Path='src\PaperNote.Mobile\Controls\InkCanvasView.cs';Pattern='SelectedObjectId';Label='selected object state'},
   @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='EraserModeButton';Label='eraser mode control'},
   @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='InkOpacityButton';Label='opacity control'},
@@ -90,7 +90,27 @@ $sourceAssertions=@(
   @{Path='src\PaperNote.Mobile\Services\MobileNotebookRepository.cs';Pattern='MaterialLibrary';Label='Android material repository'},
   @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='SaveSelectionAsMaterialAsync';Label='Android save selection as material entry'},
   @{Path='src\PaperNote.Mobile\Pages\EditorPage.StudyAssist.cs';Pattern='ShowSelectionMaterialsAsync';Label='Android personal material menu'},
-  @{Path='src\PaperNote.Mobile\Pages\EditorPage.StudyAssist.cs';Pattern='SelectionMaterialLibraryService.Instantiate';Label='Android editable material insertion'}
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.StudyAssist.cs';Pattern='SelectionMaterialLibraryService.Instantiate';Label='Android editable material insertion'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='高级离线工具';Label='advanced offline tools entry'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='ShowMobileReadingToolsAsync';Label='two-page and reference reading entry'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='ConfigureMobileToolbarAsync';Label='toolbar layout settings entry'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='MinimumHeightRequest = 48';Label='48dp toolbar touch targets'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='ApplySavedMobileToolbarLayout();';Label='saved toolbar layout restoration'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.AdvancedOfflineTools.cs';Pattern='PDF 表单与签名';Label='mobile PDF forms and signature tools'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.AdvancedOfflineTools.cs';Pattern='MathFormulaService.ExportSvg';Label='mobile formula SVG export'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.AdvancedOfflineTools.cs';Pattern='NotebookMergeService.MergeInto';Label='mobile notebook merge'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.AdvancedOfflineTools.cs';Pattern='LocalResourcePackService.ImportAsync';Label='mobile resource pack import'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.AdvancedOfflineTools.cs';Pattern='service.ImportAsync(path)';Label='safe mobile extension import'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.AdvancedOfflineTools.cs';Pattern='_toolRow.IsVisible = true; _settingRow.IsVisible = true; _advancedRow.IsVisible = true;';Label='toolbar layouts start from visible controls'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.AdvancedOfflineTools.cs';Pattern='SemanticProperties.SetDescription(_toolbar';Label='toolbar accessibility description'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.AdvancedOfflineTools.cs';Pattern='CreateReadOnlyCanvas';Label='mobile read-only comparison canvases'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.AdvancedOfflineTools.cs';Pattern='AudioTimelineService.SetTrimRange';Label='mobile recording trim editing'},
+  @{Path='src\PaperNote.Mobile\Services\MobileAudioService.cs';Pattern='StartRecording(string filePath, int sampleRate = 44100, int bitRate = 128000)';Label='configurable Android recording quality'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='(32000, 64000)';Label='space-saving recording preset'},
+  @{Path='src\PaperNote.Mobile\Pages\EditorPage.cs';Pattern='(48000, 192000)';Label='high-quality recording preset'},
+  @{Path='src\PaperNote.Core\Services\PdfAdvancedWorkflowService.cs';Pattern='AddSignature';Label='shared PDF signature workflow'},
+  @{Path='src\PaperNote.Core\Services\MathFormulaService.cs';Pattern='ExportSvg';Label='shared formula export'},
+  @{Path='src\PaperNote.Core\Services\LocalExtensionService.cs';Pattern='never execute third-party code';Label='safe declarative extension host'}
 )
 foreach($assertion in $sourceAssertions){
   $path=Join-Path $environment.RepoRoot $assertion.Path

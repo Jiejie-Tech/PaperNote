@@ -4,6 +4,32 @@
              xmlns:local="clr-namespace:PaperNote.Desktop"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <Style TargetType="Button">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="MinWidth" Value="34" />
+            <Setter Property="KeyboardNavigation.IsTabStop" Value="True" />
+            <Setter Property="FocusVisualStyle">
+                <Setter.Value>
+                    <Style>
+                        <Setter Property="Control.Template">
+                            <Setter.Value>
+                                <ControlTemplate>
+                                    <Border Margin="2" BorderBrush="#FF1D4ED8" BorderThickness="3" CornerRadius="4" />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type Button}}" />
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="KeyboardNavigation.IsTabStop" Value="True" />
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="KeyboardNavigation.IsTabStop" Value="True" />
+        </Style>
     </Application.Resources>
 </Application>

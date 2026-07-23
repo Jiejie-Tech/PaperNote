@@ -78,6 +78,12 @@ internal static class Program
 
             window = new MainWindow();
             Assert(window.FindName("NotebookProtectionButton") is Button, "The editor should expose notebook password protection.");
+            var advancedToolsButton = (Button)(window.FindName("AdvancedOfflineToolsButton") ?? throw new InvalidOperationException("Missing advanced offline tools button."));
+            Assert(advancedToolsButton.Visibility == Visibility.Visible && advancedToolsButton.IsEnabled, "The Windows advanced offline tools entry should be visible and enabled.");
+            Assert(System.Windows.Automation.AutomationProperties.GetAutomationId(advancedToolsButton) == "AdvancedOfflineToolsButton", "The advanced offline tools entry should expose a stable automation ID.");
+            Assert(window.FindName("WritingToolsPanel") is StackPanel && window.FindName("InsertToolsPanel") is StackPanel && window.FindName("InkStylePanel") is StackPanel, "Desktop toolbar layouts should expose named writing, insert and ink-style groups.");
+            Assert(window.GetType().GetMethod("ApplyDesktopToolbarLayout", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Desktop toolbar layout switching should be available.");
+            Assert(window.GetType().GetMethod("ShowTwoPageReadingWindow", BindingFlags.Instance | BindingFlags.NonPublic) is not null && window.GetType().GetMethod("ShowReferencePageWindow", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "Desktop two-page and reference reading views should be available.");
             Assert(window.FindName("StudyAssistButton") is Button, "The Windows toolbar should expose classroom and study tools.");
             Assert(window.FindName("LaserTool") is RadioButton, "The Windows toolbar should expose a non-persistent laser pointer.");
             Assert(window.FindName("LaserPointerTrail") is System.Windows.Shapes.Polyline, "The Windows page should expose a transient laser trail overlay.");

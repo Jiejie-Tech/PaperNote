@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
@@ -10,6 +10,11 @@ public sealed class SelectionMaterial
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = "个人素材";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
+    public string Category { get; set; } = "未分类";
+    public List<string> Keywords { get; set; } = [];
+    public bool IsFavorite { get; set; }
+    public string ThumbnailData { get; set; } = string.Empty;
     public double Width { get; set; } = 1;
     public double Height { get; set; } = 1;
     public List<PaperInkStroke> Strokes { get; set; } = [];
@@ -183,6 +188,11 @@ public sealed class SelectionMaterialLibraryService
         {
             material.Id = material.Id == Guid.Empty || result.Any(item => item.Id == material.Id) ? Guid.NewGuid() : material.Id;
             material.Name = NormalizeName(material.Name);
+            material.Category = string.IsNullOrWhiteSpace(material.Category) ? "未分类" : material.Category.Trim()[..Math.Min(material.Category.Trim().Length, 40)];
+            material.Keywords = (material.Keywords ?? []).Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()[..Math.Min(value.Trim().Length, 30)]).Distinct(StringComparer.CurrentCultureIgnoreCase).Take(20).ToList();
+            if (material.UpdatedAt < material.CreatedAt) material.UpdatedAt = material.CreatedAt;
+            material.ThumbnailData ??= string.Empty;
+            if (!string.IsNullOrWhiteSpace(material.ThumbnailData)) try { _ = Convert.FromBase64String(material.ThumbnailData); } catch (FormatException) { material.ThumbnailData = string.Empty; }
             material.Width = IsPositiveFinite(material.Width) ? material.Width : 1;
             material.Height = IsPositiveFinite(material.Height) ? material.Height : 1;
             material.Strokes = (material.Strokes ?? [])

@@ -133,7 +133,7 @@ public sealed partial class NotebookStorageService
         }
 
         NormalizeDocument(document);
-        document.FormatVersion = Math.Max(document.FormatVersion, 17);
+        document.FormatVersion = Math.Max(document.FormatVersion, 19);
         document.ModifiedAt = DateTimeOffset.Now;
         var bytes = encrypt
             ? _encryptionService.Encrypt(document, password ?? throw new ArgumentNullException(nameof(password)))
@@ -142,6 +142,7 @@ public sealed partial class NotebookStorageService
             ?? throw new InvalidOperationException("无法确定笔记本保存目录。");
 
         Directory.CreateDirectory(directory);
+        StorageCapacityService.EnsureCanWrite(filePath, bytes.LongLength);
         await _backupService.CreateAutomaticBackupAsync(filePath, cancellationToken);
         var temporaryPath = filePath + ".tmp";
         try
@@ -343,9 +344,54 @@ public sealed partial class NotebookStorageService
             page.BackgroundCropRight = NormalizeCrop(page.BackgroundCropRight);
             page.BackgroundCropBottom = NormalizeCrop(page.BackgroundCropBottom);
             page.Tags = NormalizeTags(page.Tags);
-            page.OcrText ??= string.Empty;
-            page.RecognizedText ??= string.Empty;
+            page.OcrText = NormalizeIndexedText(page.OcrText);
+            page.OcrBlocks ??= [];
+            page.OcrBlocks = page.OcrBlocks.Where(block => block is not null).Take(4000).ToList();
+            var usedOcrBlockIds = new HashSet<Guid>();
+            foreach (var block in page.OcrBlocks)
+            {
+                if (block.Id == Guid.Empty || !usedOcrBlockIds.Add(block.Id))
+                {
+                    block.Id = Guid.NewGuid();
+                    usedOcrBlockIds.Add(block.Id);
+                }
+                block.Text = NormalizeLimitedText(block.Text, 2000);
+                block.Confidence = NormalizeUnit(block.Confidence);
+                block.X = Math.Max(0, double.IsFinite(block.X) ? block.X : 0);
+                block.Y = Math.Max(0, double.IsFinite(block.Y) ? block.Y : 0);
+                block.Width = Math.Max(0, double.IsFinite(block.Width) ? block.Width : 0);
+                block.Height = Math.Max(0, double.IsFinite(block.Height) ? block.Height : 0);
+            }
+            page.OcrAverageConfidence = page.OcrBlocks.Count == 0
+                ? NormalizeUnit(page.OcrAverageConfidence)
+                : page.OcrBlocks.Average(block => block.Confidence);
+            if (page.OcrUpdatedAt is { } ocrUpdatedAt && ocrUpdatedAt < page.CreatedAt) page.OcrUpdatedAt = page.CreatedAt;
+            if (string.IsNullOrWhiteSpace(page.OcrText)) page.OcrNeedsReview = false;
+            page.RecognizedText = NormalizeIndexedText(page.RecognizedText);
             page.PdfText = page.BackgroundSourceType == "PDF" ? NormalizeIndexedText(page.PdfText) : string.Empty;
+            page.PdfTextBlocks ??= [];
+            page.PdfTextBlocks = page.BackgroundSourceType == "PDF"
+                ? page.PdfTextBlocks.Where(block => block is not null).Take(20_000).ToList()
+                : [];
+            var usedPdfTextBlockIds = new HashSet<Guid>();
+            foreach (var block in page.PdfTextBlocks)
+            {
+                if (block.Id == Guid.Empty || !usedPdfTextBlockIds.Add(block.Id))
+                {
+                    block.Id = Guid.NewGuid();
+                    usedPdfTextBlockIds.Add(block.Id);
+                }
+                block.Text = NormalizeLimitedText(block.Text, 500);
+                block.X = NormalizeUnit(block.X);
+                block.Y = NormalizeUnit(block.Y);
+                block.Width = Math.Clamp(NormalizeUnit(block.Width), 0, 1 - block.X);
+                block.Height = Math.Clamp(NormalizeUnit(block.Height), 0, 1 - block.Y);
+                block.ReadingOrder = Math.Max(0, block.ReadingOrder);
+            }
+            page.PdfTextBlocks = page.PdfTextBlocks.OrderBy(block => block.ReadingOrder).ToList();
+            page.PdfPixelsPerMillimeter = double.IsFinite(page.PdfPixelsPerMillimeter)
+                ? Math.Clamp(page.PdfPixelsPerMillimeter, 0.01, 10_000)
+                : 4;
             page.PdfLinks ??= [];
             page.PdfLinks = page.BackgroundSourceType == "PDF"
                 ? page.PdfLinks.Where(link => link is not null).Take(2000).ToList()
@@ -416,6 +462,13 @@ public sealed partial class NotebookStorageService
                 recording.DisplayName = displayName[..Math.Min(displayName.Length, 80)];
                 recording.DurationMilliseconds = Math.Max(0, recording.DurationMilliseconds);
                 recording.FileSize = Math.Max(0, recording.FileSize);
+                recording.SampleRate = Math.Clamp(recording.SampleRate <= 0 ? 48000 : recording.SampleRate, 8000, 192000);
+                recording.BitRate = Math.Clamp(recording.BitRate <= 0 ? 128000 : recording.BitRate, 16000, 512000);
+                recording.InputDeviceName = NormalizeLimitedText(recording.InputDeviceName, 160);
+                recording.TrimStartMilliseconds = Math.Clamp(recording.TrimStartMilliseconds, 0, recording.DurationMilliseconds);
+                recording.TrimEndMilliseconds = recording.TrimEndMilliseconds <= 0
+                    ? recording.DurationMilliseconds
+                    : Math.Clamp(recording.TrimEndMilliseconds, recording.TrimStartMilliseconds, recording.DurationMilliseconds);
                 recording.MimeType = string.IsNullOrWhiteSpace(recording.MimeType) ? "audio/mp4" : recording.MimeType.Trim();
                 recording.WaveformPeaks ??= [];
                 recording.WaveformPeaks = recording.WaveformPeaks
@@ -580,6 +633,11 @@ public sealed partial class NotebookStorageService
         pageObject.Y = Math.Min(pageObject.Y, Math.Max(0, 1188 - pageObject.Height));
         pageObject.Text ??= string.Empty;
         pageObject.ImageData ??= string.Empty;
+        pageObject.AltText = NormalizeLimitedText(pageObject.AltText, 500);
+        pageObject.FormulaLatex = NormalizeLimitedText(pageObject.FormulaLatex, 4000);
+        pageObject.FormFieldName = NormalizeLimitedText(pageObject.FormFieldName, 120);
+        pageObject.FormFieldKind = pageObject.FormFieldKind is "Text" or "Checkbox" or "Signature" ? pageObject.FormFieldKind : string.Empty;
+        pageObject.FormFieldValue = NormalizeLimitedText(pageObject.FormFieldValue, 4000);
         pageObject.StrokeColor = string.IsNullOrWhiteSpace(pageObject.StrokeColor) ? PageObjectDefaults.StrokeColor : pageObject.StrokeColor;
         pageObject.FillColor = string.IsNullOrWhiteSpace(pageObject.FillColor) ? PageObjectDefaults.FillColor : pageObject.FillColor;
         pageObject.StrokeThickness = double.IsFinite(pageObject.StrokeThickness) ? Math.Clamp(pageObject.StrokeThickness, 1, 20) : 3;

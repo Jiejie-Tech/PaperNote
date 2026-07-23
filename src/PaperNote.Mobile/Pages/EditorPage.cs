@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using PaperNote.Core.Ink;
 using PaperNote.Core.Models;
 using PaperNote.Core.Services;
@@ -28,6 +28,10 @@ public sealed partial class EditorPage : ContentPage
     private readonly Button _eraserModeButton;
     private readonly Button _smoothingButton;
     private readonly Button _geometryAssistButton;
+    private readonly Grid _toolRow;
+    private readonly Grid _settingRow;
+    private readonly Grid _advancedRow;
+    private readonly VerticalStackLayout _toolbar;
     private readonly Dictionary<InkCanvasTool, Button> _toolButtons = [];
     private readonly Dictionary<InkCanvasTool, string> _toolLabels = [];
     private CancellationTokenSource? _saveCts;
@@ -60,10 +64,14 @@ public sealed partial class EditorPage : ContentPage
 
         var back = UiTheme.Button("‹ 资料库", Back_Clicked);
         back.AutomationId = "EditorBackButton";
+        UiTheme.Describe(back, "返回资料库", "双击返回笔记本资料库");
         _title = new Entry { FontSize = 20, FontAttributes = FontAttributes.Bold, TextColor = UiTheme.Text, BackgroundColor = Colors.Transparent, MaxLength = 80, HorizontalOptions = LayoutOptions.Fill };
         _title.TextChanged += Title_TextChanged;
+        _title.AutomationId = "NotebookTitleEntry";
+        UiTheme.Describe(_title, "笔记本标题", "双击编辑标题");
         var more = UiTheme.Button("更多", More_Clicked);
         more.AutomationId = "EditorMoreButton";
+        UiTheme.Describe(more, "更多操作", "双击打开页面、PDF、文字和学习工具菜单");
         var header = new Grid
         {
             Padding = new Thickness(10, 8),
@@ -81,6 +89,8 @@ public sealed partial class EditorPage : ContentPage
             InkOpacity = Preferences.Default.Get("InkOpacity", 1d),
             GeometryAssistEnabled = Preferences.Default.Get("GeometryAssist", false)
         };
+        _canvas.AutomationId = "NotebookInkCanvas";
+        UiTheme.Describe(_canvas, "笔记页面画布", "可使用触控笔书写；双指平移和缩放；工具栏可切换钢笔、荧光笔、橡皮和平移选择");
         _canvas.InkChanged += Canvas_InkChanged;
         _canvas.HistoryChanged += (_, _) => UpdateHistory();
         _canvas.SelectionChanged += (_, _) => UpdatePageStatus();
@@ -88,35 +98,35 @@ public sealed partial class EditorPage : ContentPage
         _audioTimer.Interval = TimeSpan.FromMilliseconds(250);
         _audioTimer.Tick += AudioTimer_Tick;
 
-        var toolRow = CreateToolbarRow(5);
-        AddTool(toolRow, InkCanvasTool.Pen, "钢笔", 0);
-        AddTool(toolRow, InkCanvasTool.Highlighter, "荧光笔", 1);
-        AddTool(toolRow, InkCanvasTool.Eraser, "橡皮擦", 2);
-        AddTool(toolRow, InkCanvasTool.Pan, "平移", 3);
-        AddTool(toolRow, InkCanvasTool.Select, "选择", 4);
+        _toolRow = CreateToolbarRow(5);
+        AddTool(_toolRow, InkCanvasTool.Pen, "钢笔", 0);
+        AddTool(_toolRow, InkCanvasTool.Highlighter, "荧光笔", 1);
+        AddTool(_toolRow, InkCanvasTool.Eraser, "橡皮擦", 2);
+        AddTool(_toolRow, InkCanvasTool.Pan, "平移", 3);
+        AddTool(_toolRow, InkCanvasTool.Select, "选择", 4);
 
-        var settingRow = CreateToolbarRow(5);
+        _settingRow = CreateToolbarRow(5);
         _widthButton = CreateToolbarButton("粗细 3.2", Width_Clicked, "InkWidthButton");
         _colorButton = CreateToolbarButton("颜色", Color_Clicked, "InkColorButton");
         _fingerButton = CreateToolbarButton("手指：开", ToggleFingerDrawing_Clicked, "FingerDrawingButton");
         _undo = CreateToolbarButton("撤销", (_, _) => { _canvas.Undo(); UpdateHistory(); }, "UndoButton");
         _redo = CreateToolbarButton("重做", (_, _) => { _canvas.Redo(); UpdateHistory(); }, "RedoButton");
-        settingRow.Add(_widthButton, 0); settingRow.Add(_colorButton, 1); settingRow.Add(_fingerButton, 2); settingRow.Add(_undo, 3); settingRow.Add(_redo, 4);
+        _settingRow.Add(_widthButton, 0); _settingRow.Add(_colorButton, 1); _settingRow.Add(_fingerButton, 2); _settingRow.Add(_undo, 3); _settingRow.Add(_redo, 4);
 
-        var advancedRow = CreateToolbarRow(4);
+        _advancedRow = CreateToolbarRow(4);
         _opacityButton = CreateToolbarButton("不透明 100%", Opacity_Clicked, "InkOpacityButton");
         _eraserModeButton = CreateToolbarButton("橡皮：局部", EraserMode_Clicked, "EraserModeButton");
         _smoothingButton = CreateToolbarButton("平滑：开", ToggleSmoothing_Clicked, "SmoothingButton");
         _geometryAssistButton = CreateToolbarButton("几何：关", ToggleGeometryAssist_Clicked, "GeometryAssistButton");
-        advancedRow.Add(_opacityButton, 0); advancedRow.Add(_eraserModeButton, 1); advancedRow.Add(_smoothingButton, 2); advancedRow.Add(_geometryAssistButton, 3);
+        _advancedRow.Add(_opacityButton, 0); _advancedRow.Add(_eraserModeButton, 1); _advancedRow.Add(_smoothingButton, 2); _advancedRow.Add(_geometryAssistButton, 3);
 
-        var toolbar = new VerticalStackLayout
+        _toolbar = new VerticalStackLayout
         {
             Spacing = 5,
             Padding = new Thickness(8, 5, 8, 7),
             BackgroundColor = UiTheme.Surface,
             ZIndex = 20,
-            Children = { toolRow, settingRow, advancedRow }
+            Children = { _toolRow, _settingRow, _advancedRow }
         };
         _pages = new CollectionView
         {
@@ -165,7 +175,8 @@ public sealed partial class EditorPage : ContentPage
         _audioButton.AutomationId = "AudioTimelineButton";
         bottomButtons.Add(_audioButton);
         var bottom = new Grid { Padding = new Thickness(10, 7, 10, 10), ZIndex = 20, ColumnDefinitions = { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Auto) }, BackgroundColor = UiTheme.Surface };
-        bottom.Add(_pageStatus); bottom.Add(bottomButtons, 1);
+        bottom.Add(_pageStatus);
+        bottom.Add(new ScrollView { Orientation = ScrollOrientation.Horizontal, HorizontalScrollBarVisibility = ScrollBarVisibility.Never, Content = bottomButtons }, 1);
 
         _pdfProgressBar = new ProgressBar { Progress = 0, ProgressColor = UiTheme.Accent, BackgroundColor = UiTheme.Border, HeightRequest = 8 };
         _pdfProgressLabel = new Label { Text = "正在准备 PDF…", TextColor = UiTheme.Text, FontSize = 13, HorizontalTextAlignment = TextAlignment.Center };
@@ -208,7 +219,7 @@ public sealed partial class EditorPage : ContentPage
             IsClippedToBounds = true,
             RowDefinitions = { new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Auto), new RowDefinition(GridLength.Star), new RowDefinition(GridLength.Auto) }
         };
-        root.Add(header); root.Add(toolbar, 0, 1); root.Add(_mainGrid, 0, 2); root.Add(bottom, 0, 3);
+        root.Add(header); root.Add(_toolbar, 0, 1); root.Add(_mainGrid, 0, 2); root.Add(bottom, 0, 3);
         root.Add(_pdfProgressOverlay);
         Grid.SetRowSpan(_pdfProgressOverlay, 4);
         Content = root;
@@ -223,6 +234,7 @@ public sealed partial class EditorPage : ContentPage
         _canvas.FingerDrawingEnabled = Preferences.Default.Get("FingerDrawing", true);
         UpdateFingerDrawingButton();
         LoadNotebook();
+        ApplySavedMobileToolbarLayout();
     }
 
     protected override async void OnDisappearing()
@@ -310,7 +322,7 @@ public sealed partial class EditorPage : ContentPage
 
     private static Grid CreateToolbarRow(int columns)
     {
-        var row = new Grid { ColumnSpacing = 5, HeightRequest = 42 };
+        var row = new Grid { ColumnSpacing = 5, HeightRequest = 48 };
         for (var i = 0; i < columns; i++) row.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
         return row;
     }
@@ -320,12 +332,13 @@ public sealed partial class EditorPage : ContentPage
         var button = UiTheme.Button(text, clicked);
         button.AutomationId = automationId;
         button.FontSize = 12;
-        button.HeightRequest = 42;
-        button.MinimumHeightRequest = 42;
+        button.HeightRequest = 48;
+        button.MinimumHeightRequest = 48;
         button.MinimumWidthRequest = 0;
         button.Padding = new Thickness(3, 6);
         button.CornerRadius = 10;
         button.HorizontalOptions = LayoutOptions.Fill;
+        UiTheme.Describe(button, text, "双击切换或调整此工具");
         return button;
     }
 
@@ -520,6 +533,7 @@ public sealed partial class EditorPage : ContentPage
                 actions.Add("设置选中笔迹粗细");
                 actions.Add("设置选中笔迹类型");
                 actions.Add("跳到关联录音");
+                actions.Add("手写转文字（离线）");
             }
             actions.AddRange(["复制选中内容", "导出选区为 PNG", "旋转 90°", "复制到其他页面", "移动到其他页面"]);
             if (selectedObjectCount > 0)
@@ -529,10 +543,12 @@ public sealed partial class EditorPage : ContentPage
             }
             actions.Add("删除选中内容");
         }
-
-        if (!string.IsNullOrWhiteSpace(_page.BackgroundImageData)) actions.Add("识别当前页图片文字（离线 OCR）");
+        if (!string.IsNullOrWhiteSpace(_page.BackgroundImageData) && _recognitionCancellation is null) actions.Add("识别当前页图片文字（离线 OCR）");
+        if (_recognitionCancellation is null && _repository.Current.Document.Pages.Any(page => !string.IsNullOrWhiteSpace(page.BackgroundImageData))) actions.Add("整本批量离线 OCR");
+        if (_recognitionCancellation is not null) actions.Add("取消批量 OCR");
+        if (!string.IsNullOrWhiteSpace(_page.OcrText)) actions.Add("校对当前页 OCR 结果");
         actions.Add($"套索筛选：{SelectionFilterDisplayName(_canvas.SelectionFilter)}");
-        actions.AddRange(["课堂与复习工具", "录音时间轴", "图层", "纸张设置", "适合屏幕", "清空当前页墨迹", "重命名当前页", "添加文字", "添加形状", "复制当前页", "删除当前页"]);
+        actions.AddRange(["高级离线工具", "双页阅读与参考", "工具栏设置", "课堂与复习工具", "录音时间轴", "图层", "纸张设置", "适合屏幕", "清空当前页墨迹", "重命名当前页", "添加文字", "添加形状", "复制当前页", "删除当前页"]);
         actions.Add(_repository.IsCurrentEncrypted ? "管理密码保护" : "启用密码保护");
         actions.AddRange(["导出笔记本", "移到回收站"]);
 
@@ -572,6 +588,9 @@ public sealed partial class EditorPage : ContentPage
             case "跳到关联录音": await JumpSelectedStrokeToAudioAsync(); break;
             case "手写转文字（离线）": await RecognizeSelectedInkAsync(); break;
             case "识别当前页图片文字（离线 OCR）": await RecognizeCurrentBackgroundAsync(); break;
+            case "整本批量离线 OCR": await RecognizeNotebookBackgroundsAsync(); break;
+            case "取消批量 OCR": CancelNotebookRecognition(); break;
+            case "校对当前页 OCR 结果": await ReviewCurrentOcrAsync(); break;
             case "保存到个人素材库": await SaveSelectionAsMaterialAsync(); break;
             case "复制选中内容": _canvas.DuplicateSelection(); break;
             case "导出选区为 PNG":
@@ -590,6 +609,9 @@ public sealed partial class EditorPage : ContentPage
             case string filterAction when filterAction.StartsWith("套索筛选：", StringComparison.Ordinal):
                 await ChooseSelectionFilterAsync();
                 break;
+            case "高级离线工具": await ShowAdvancedOfflineToolsAsync(); break;
+            case "双页阅读与参考": await ShowMobileReadingToolsAsync(); break;
+            case "工具栏设置": await ConfigureMobileToolbarAsync(); break;
             case "课堂与复习工具": await ShowStudyAssistAsync(); break;
             case "录音时间轴": await ShowAudioTimelineAsync(); break;
             case "图层": await ShowLayerMenuAsync(); break;
@@ -809,17 +831,22 @@ public sealed partial class EditorPage : ContentPage
         var recordingId = Guid.NewGuid();
         var path = AudioAttachmentService.PrepareRecordingPath(_repository.Storage.NotebooksDirectory, notebook.Id, _page.Id, recordingId, ".m4a");
         var storedPath = AudioAttachmentService.ToStoredPath(_repository.Storage.NotebooksDirectory, path);
+        var quality = Preferences.Default.Get("AudioQuality", "标准");
+        var (sampleRate, bitRate) = quality switch { "省空间" => (32000, 64000), "高质量" => (48000, 192000), _ => (44100, 128000) };
         var recording = new AudioRecording
         {
             Id = recordingId,
             LocalFilePath = storedPath,
             DisplayName = $"录音 {_page.AudioRecordings.Count + 1}",
-            MimeType = "audio/mp4"
+            MimeType = "audio/mp4",
+            SampleRate = sampleRate,
+            BitRate = bitRate,
+            InputDeviceName = "系统默认麦克风"
         };
         _page.AudioRecordings.Add(recording);
         try
         {
-            _audio.StartRecording(path);
+            _audio.StartRecording(path, sampleRate, bitRate);
             _activeRecording = recording;
             _lastAutomaticAudioCue = 0;
             _lastPresentedAudioCue = -1;

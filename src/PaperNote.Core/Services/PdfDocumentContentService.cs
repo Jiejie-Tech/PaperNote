@@ -1,4 +1,4 @@
-﻿using PaperNote.Core.Models;
+using PaperNote.Core.Models;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Actions;
 using UglyToad.PdfPig.Annotations;
@@ -18,7 +18,8 @@ public sealed record PdfExtractedLink(
 public sealed record PdfExtractedPage(
     int PageNumber,
     string Text,
-    IReadOnlyList<PdfExtractedLink> Links);
+    IReadOnlyList<PdfExtractedLink> Links,
+    IReadOnlyList<PdfTextBlock> TextBlocks);
 
 public sealed record PdfExtractedOutline(
     string Title,
@@ -86,6 +87,28 @@ public static class PdfDocumentContentService
                     warnings.Add($"第 {pageNumber} 页文本超过限制，已截断索引内容。");
                 }
 
+                var pageWidth = Math.Max(1d, (double)page.Width);
+                var pageHeight = Math.Max(1d, (double)page.Height);
+                var textBlocks = new List<PdfTextBlock>();
+                var readingOrder = 0;
+                foreach (var word in page.GetWords().Take(20_000))
+                {
+                    var value = NormalizeSingleLine(word.Text, 500);
+                    if (value.Length == 0) continue;
+                    var box = word.BoundingBox;
+                    var x = Math.Clamp(box.Left / pageWidth, 0, 1);
+                    var y = Math.Clamp((pageHeight - box.Top) / pageHeight, 0, 1);
+                    textBlocks.Add(new PdfTextBlock
+                    {
+                        Text = value,
+                        X = x,
+                        Y = y,
+                        Width = Math.Clamp(box.Width / pageWidth, 0, 1 - x),
+                        Height = Math.Clamp(box.Height / pageHeight, 0, 1 - y),
+                        ReadingOrder = readingOrder++
+                    });
+                }
+
                 var links = new List<PdfExtractedLink>();
                 foreach (var annotation in page.GetAnnotations())
                 {
@@ -93,20 +116,18 @@ public static class PdfDocumentContentService
                     var target = goTo.Destination.PageNumber;
                     if (target <= 0 || target > document.NumberOfPages) continue;
                     var rectangle = annotation.Rectangle;
-                    var pageWidth = Math.Max(1d, (double)page.Width);
-                    var pageHeight = Math.Max(1d, (double)page.Height);
                     var x = Math.Clamp(rectangle.Left / pageWidth, 0, 1);
                     var y = Math.Clamp((pageHeight - rectangle.Top) / pageHeight, 0, 1);
                     var width = Math.Clamp(rectangle.Width / pageWidth, 0, 1 - x);
                     var height = Math.Clamp(rectangle.Height / pageHeight, 0, 1 - y);
                     links.Add(new PdfExtractedLink(x, y, width, height, target, annotation.Content ?? $"跳转到 PDF 第 {target} 页"));
                 }
-                pages[pageNumber] = new PdfExtractedPage(pageNumber, text, links);
+                pages[pageNumber] = new PdfExtractedPage(pageNumber, text, links, textBlocks);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 warnings.Add($"第 {pageNumber} 页文本层无法读取：{exception.Message}");
-                pages[pageNumber] = new PdfExtractedPage(pageNumber, string.Empty, Array.Empty<PdfExtractedLink>());
+                pages[pageNumber] = new PdfExtractedPage(pageNumber, string.Empty, Array.Empty<PdfExtractedLink>(), Array.Empty<PdfTextBlock>());
             }
         }
 
@@ -153,6 +174,7 @@ public static class PdfDocumentContentService
             page.BackgroundSourceFingerprint = sourceFingerprint;
             if (!content.Pages.TryGetValue(page.BackgroundPageNumber, out var extracted)) continue;
             page.PdfText = extracted.Text;
+            page.PdfTextBlocks = extracted.TextBlocks.Select(block => block.Clone()).ToList();
             page.PdfLinks = extracted.Links.Select(link => new PdfPageLink
             {
                 X = link.X,

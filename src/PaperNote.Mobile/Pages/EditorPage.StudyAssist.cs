@@ -1,4 +1,4 @@
-using PaperNote.Core.Models;
+﻿using PaperNote.Core.Models;
 using PaperNote.Core.Services;
 using PaperNote.Mobile.Controls;
 
@@ -12,7 +12,7 @@ public sealed partial class EditorPage
     {
         if (_page is null) return;
         var choice = await DisplayActionSheetAsync("课堂与复习工具", "取消", null,
-            "添加胶带遮挡", "常用元素", "我的素材", "激光笔", _mobilePresentationMode ? "退出演示模式" : "进入演示模式");
+            "添加胶带遮挡", "常用元素", "我的素材", "标尺与测量", "激光笔", _mobilePresentationMode ? "退出演示模式" : "进入演示模式");
         switch (choice)
         {
             case "添加胶带遮挡":
@@ -23,6 +23,9 @@ public sealed partial class EditorPage
                 break;
             case "我的素材":
                 await ShowSelectionMaterialsAsync();
+                break;
+            case "标尺与测量":
+                await ShowGeometryToolsAsync();
                 break;
             case "激光笔":
                 SelectTool(InkCanvasTool.Laser);

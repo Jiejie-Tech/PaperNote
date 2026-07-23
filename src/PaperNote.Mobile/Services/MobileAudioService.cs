@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Android.Media;
 using Android.OS;
 
@@ -38,7 +38,7 @@ public sealed class MobileAudioService : IDisposable
         return status == PermissionStatus.Granted;
     }
 
-    public void StartRecording(string filePath)
+    public void StartRecording(string filePath, int sampleRate = 44100, int bitRate = 128000)
     {
         StopPlayback();
         if (IsRecording) throw new InvalidOperationException("A recording is already active.");
@@ -54,8 +54,8 @@ public sealed class MobileAudioService : IDisposable
             recorder.SetAudioSource(AudioSource.Mic);
             recorder.SetOutputFormat(OutputFormat.Mpeg4);
             recorder.SetAudioEncoder(AudioEncoder.Aac);
-            recorder.SetAudioEncodingBitRate(128000);
-            recorder.SetAudioSamplingRate(44100);
+            recorder.SetAudioEncodingBitRate(Math.Clamp(bitRate, 32000, 320000));
+            recorder.SetAudioSamplingRate(Math.Clamp(sampleRate, 16000, 96000));
             recorder.SetOutputFile(filePath);
             recorder.Prepare();
             recorder.Start();

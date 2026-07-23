@@ -1,5 +1,41 @@
 namespace PaperNote.Core.Models;
 
+
+public sealed class RecognitionTextBlock
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Text { get; set; } = string.Empty;
+    public double Confidence { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double Width { get; set; }
+    public double Height { get; set; }
+    public bool IsAccepted { get; set; } = true;
+    public bool IsEdited { get; set; }
+
+    public RecognitionTextBlock Clone() => new()
+    {
+        Id = Id, Text = Text, Confidence = Confidence, X = X, Y = Y, Width = Width, Height = Height,
+        IsAccepted = IsAccepted, IsEdited = IsEdited
+    };
+}
+
+public sealed class PdfTextBlock
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Text { get; set; } = string.Empty;
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double Width { get; set; }
+    public double Height { get; set; }
+    public int ReadingOrder { get; set; }
+
+    public PdfTextBlock Clone() => new()
+    {
+        Id = Id, Text = Text, X = X, Y = Y, Width = Width, Height = Height, ReadingOrder = ReadingOrder
+    };
+}
+
 public sealed class PageLayer
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -20,6 +56,11 @@ public sealed class AudioRecording
     public long DurationMilliseconds { get; set; }
     public long FileSize { get; set; }
     public string MimeType { get; set; } = "audio/mp4";
+    public int SampleRate { get; set; } = 48000;
+    public int BitRate { get; set; } = 128000;
+    public string InputDeviceName { get; set; } = string.Empty;
+    public long TrimStartMilliseconds { get; set; }
+    public long TrimEndMilliseconds { get; set; }
     public List<AudioCue> Cues { get; set; } = [];
     public List<float> WaveformPeaks { get; set; } = [];
 
@@ -27,6 +68,8 @@ public sealed class AudioRecording
     {
         Id = Id, LocalFilePath = LocalFilePath, DisplayName = DisplayName, CreatedAt = CreatedAt,
         DurationMilliseconds = DurationMilliseconds, FileSize = FileSize, MimeType = MimeType,
+        SampleRate = SampleRate, BitRate = BitRate, InputDeviceName = InputDeviceName,
+        TrimStartMilliseconds = TrimStartMilliseconds, TrimEndMilliseconds = TrimEndMilliseconds,
         Cues = Cues.Select(cue => cue.Clone()).ToList(),
         WaveformPeaks = WaveformPeaks.ToList()
     };

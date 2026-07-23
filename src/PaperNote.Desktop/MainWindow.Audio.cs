@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -99,13 +99,16 @@ public partial class MainWindow
             {
                 var cueCopy = cue;
                 var label = string.IsNullOrWhiteSpace(cue.Label) ? "时间标记" : cue.Label;
-                cuesMenu.Items.Add(CreateMenuItem(
-                    $"{AudioTimelineService.FormatDuration(cue.OffsetMilliseconds)}  {label}",
-                    string.Empty,
-                    async (_, _) => await PlayDesktopRecordingAsync(recording, cueCopy.OffsetMilliseconds),
-                    exists));
+                var cueMenu = new MenuItem { Header = $"{AudioTimelineService.FormatDuration(cue.OffsetMilliseconds)}  {label}" };
+                cueMenu.Items.Add(CreateMenuItem("从这里播放", string.Empty, async (_, _) => await PlayDesktopRecordingAsync(recording, cueCopy.OffsetMilliseconds), exists));
+                cueMenu.Items.Add(CreateMenuItem("移动时间", string.Empty, (_, _) => EditDesktopAudioCue(recording, cueCopy, "Move"), !_isReadOnly));
+                cueMenu.Items.Add(CreateMenuItem("重命名", string.Empty, (_, _) => EditDesktopAudioCue(recording, cueCopy, "Rename"), !_isReadOnly));
+                cueMenu.Items.Add(CreateMenuItem("删除标记", string.Empty, (_, _) => EditDesktopAudioCue(recording, cueCopy, "Delete"), !_isReadOnly));
+                cuesMenu.Items.Add(cueMenu);
             }
             recordingMenu.Items.Add(cuesMenu);
+            recordingMenu.Items.Add(CreateMenuItem("设置播放裁剪范围", string.Empty, (_, _) => SetDesktopAudioTrim(recording), !_isReadOnly));
+            recordingMenu.Items.Add(CreateMenuItem("清除播放裁剪范围", string.Empty, (_, _) => ClearDesktopAudioTrim(recording), !_isReadOnly && (recording.TrimStartMilliseconds > 0 || recording.TrimEndMilliseconds > 0)));
             recordingMenu.Items.Add(new Separator());
             recordingMenu.Items.Add(CreateMenuItem("重命名", string.Empty, (_, _) => RenameDesktopRecording(recording), !_isReadOnly));
             recordingMenu.Items.Add(CreateMenuItem("删除", string.Empty, (_, _) => DeleteDesktopRecording(recording), !_isReadOnly));
@@ -129,6 +132,7 @@ public partial class MainWindow
             recording.Id,
             ".wav");
         recording.LocalFilePath = AudioAttachmentService.ToStoredPath(_notebookStorage.NotebooksDirectory, absolutePath);
+        recording.InputDeviceName = "系统默认录音设备";
 
         try
         {
@@ -206,6 +210,9 @@ public partial class MainWindow
         }
         try
         {
+            var start = recording.TrimStartMilliseconds > 0 ? recording.TrimStartMilliseconds : 0;
+            var end = recording.TrimEndMilliseconds > start ? recording.TrimEndMilliseconds : recording.DurationMilliseconds;
+            offsetMilliseconds = Math.Clamp(offsetMilliseconds <= 0 ? start : offsetMilliseconds, start, Math.Max(start, end));
             await _desktopAudioService.PlayAsync(path, offsetMilliseconds);
             _desktopPlayingRecording = recording;
             UpdateAudioPlaybackHighlight(AudioTimelineService.GetActiveStrokeId(recording, offsetMilliseconds));
@@ -311,6 +318,13 @@ public partial class MainWindow
     {
         if (_desktopPlayingRecording is not null && (_desktopAudioService.IsPlaying || _desktopAudioService.IsPaused))
         {
+            if (_desktopPlayingRecording.TrimEndMilliseconds > _desktopPlayingRecording.TrimStartMilliseconds &&
+                _desktopAudioService.PlaybackPositionMilliseconds >= _desktopPlayingRecording.TrimEndMilliseconds)
+            {
+                StopDesktopPlayback();
+                StatusText.Text = "已播放到裁剪终点。";
+                return;
+            }
             var strokeId = AudioTimelineService.GetActiveStrokeId(
                 _desktopPlayingRecording,
                 _desktopAudioService.PlaybackPositionMilliseconds);
@@ -415,5 +429,49 @@ public partial class MainWindow
         ok.Click += (_, _) => dialog.DialogResult = true;
         dialog.Loaded += (_, _) => input.Focus();
         return dialog.ShowDialog() == true ? input.Text : null;
+    }
+
+    private void EditDesktopAudioCue(AudioRecording recording, AudioCue cue, string action)
+    {
+        if (_isReadOnly) return;
+        if (action == "Move")
+        {
+            var input = PromptForText("移动时间标记", "新的秒数", (cue.OffsetMilliseconds / 1000d).ToString("0.###"));
+            if (double.TryParse(input, out var seconds) && seconds >= 0) AudioTimelineService.MoveCue(recording, cue.Id, (long)Math.Round(seconds * 1000));
+        }
+        else if (action == "Rename")
+        {
+            var name = PromptForText("重命名时间标记", "名称", cue.Label);
+            if (name is not null) AudioTimelineService.RenameCue(recording, cue.Id, name);
+        }
+        else if (MessageBox.Show(this, "确定删除这个时间标记吗？录音文件不会被删除。", "删除时间标记", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        {
+            AudioTimelineService.RemoveCue(recording, cue.Id);
+        }
+        if (_currentPage is not null) _currentPage.ModifiedAt = DateTimeOffset.Now;
+        MarkDirty();
+        StatusText.Text = "录音时间标记已更新";
+    }
+
+    private void SetDesktopAudioTrim(AudioRecording recording)
+    {
+        if (_isReadOnly) return;
+        var start = PromptForText("播放裁剪起点", "起始秒数", (recording.TrimStartMilliseconds / 1000d).ToString("0.###"));
+        var currentEnd = recording.TrimEndMilliseconds > 0 ? recording.TrimEndMilliseconds : recording.DurationMilliseconds;
+        var end = PromptForText("播放裁剪终点", "结束秒数", (currentEnd / 1000d).ToString("0.###"));
+        if (!double.TryParse(start, out var startSeconds) || !double.TryParse(end, out var endSeconds)) return;
+        AudioTimelineService.SetTrimRange(recording, (long)Math.Round(startSeconds * 1000), (long)Math.Round(endSeconds * 1000));
+        if (_currentPage is not null) _currentPage.ModifiedAt = DateTimeOffset.Now;
+        MarkDirty();
+        StatusText.Text = $"播放范围：{AudioTimelineService.FormatDuration(recording.TrimStartMilliseconds)} - {AudioTimelineService.FormatDuration(recording.TrimEndMilliseconds)}";
+    }
+
+    private void ClearDesktopAudioTrim(AudioRecording recording)
+    {
+        if (_isReadOnly) return;
+        AudioTimelineService.SetTrimRange(recording, 0, 0);
+        if (_currentPage is not null) _currentPage.ModifiedAt = DateTimeOffset.Now;
+        MarkDirty();
+        StatusText.Text = "已清除录音裁剪范围";
     }
 }

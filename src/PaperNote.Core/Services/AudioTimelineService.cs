@@ -48,6 +48,49 @@ public static class AudioTimelineService
         return removed;
     }
 
+    public static bool MoveCue(AudioRecording recording, Guid cueId, long offsetMilliseconds)
+    {
+        ArgumentNullException.ThrowIfNull(recording);
+        var cue = recording.Cues.FirstOrDefault(item => item.Id == cueId);
+        if (cue is null) return false;
+        cue.OffsetMilliseconds = Math.Clamp(offsetMilliseconds, 0, recording.DurationMilliseconds > 0 ? recording.DurationMilliseconds : long.MaxValue);
+        recording.Cues = recording.Cues.OrderBy(item => item.OffsetMilliseconds).ToList();
+        return true;
+    }
+
+    public static bool RenameCue(AudioRecording recording, Guid cueId, string? label)
+    {
+        ArgumentNullException.ThrowIfNull(recording);
+        var cue = recording.Cues.FirstOrDefault(item => item.Id == cueId);
+        if (cue is null) return false;
+        var normalized = (label ?? string.Empty).Trim();
+        cue.Label = normalized[..Math.Min(normalized.Length, 80)];
+        return true;
+    }
+
+    public static bool RemoveCue(AudioRecording recording, Guid cueId)
+    {
+        ArgumentNullException.ThrowIfNull(recording);
+        return recording.Cues.RemoveAll(item => item.Id == cueId) > 0;
+    }
+
+    public static void SetTrimRange(AudioRecording recording, long startMilliseconds, long endMilliseconds)
+    {
+        ArgumentNullException.ThrowIfNull(recording);
+        var duration = Math.Max(0, recording.DurationMilliseconds);
+        startMilliseconds = Math.Clamp(startMilliseconds, 0, duration);
+        endMilliseconds = endMilliseconds <= 0 ? duration : Math.Clamp(endMilliseconds, startMilliseconds, duration);
+        recording.TrimStartMilliseconds = startMilliseconds;
+        recording.TrimEndMilliseconds = endMilliseconds;
+    }
+
+    public static long GetEffectiveDuration(AudioRecording recording)
+    {
+        ArgumentNullException.ThrowIfNull(recording);
+        var end = recording.TrimEndMilliseconds <= 0 ? recording.DurationMilliseconds : recording.TrimEndMilliseconds;
+        return Math.Max(0, end - Math.Clamp(recording.TrimStartMilliseconds, 0, end));
+    }
+
     public static IReadOnlyList<AudioTimelineCue> GetCues(NotebookPage page, long offsetMilliseconds, long tolerance = 250)
         => page.AudioRecordings
             .SelectMany(recording => recording.Cues

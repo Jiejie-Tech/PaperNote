@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -45,6 +45,7 @@ public partial class MainWindow
             elements.Items.Add(CreateMenuItem(label, "", (_, _) => InsertStudyElement(captured), !_isReadOnly && _currentPage is not null));
         }
         menu.Items.Add(elements);
+        menu.Items.Add(CreateGeometryToolsMenu());
         var materials = new MenuItem { Header = "我的素材", IsEnabled = _selectionMaterials.Count > 0 && !_isReadOnly && _currentPage is not null };
         var deleteMaterials = new MenuItem { Header = "删除素材", IsEnabled = _selectionMaterials.Count > 0 };
         if (_selectionMaterials.Count == 0)

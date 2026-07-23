@@ -16,7 +16,10 @@ public partial class MainWindow
         var hasNotebook = _currentNotebook is not null;
         var hasPage = _currentNotebook is not null && _currentPage is not null;
         var menu = new ContextMenu();
-        menu.Items.Add(CreateMenuItem("识别当前页背景文字（离线 OCR）", "", async (_, _) => await RecognizeCurrentBackgroundAsync(), hasPage && !string.IsNullOrWhiteSpace(_currentPage?.BackgroundImageData)));
+        menu.Items.Add(CreateMenuItem("识别当前页背景文字（离线 OCR）", "", async (_, _) => await RecognizeCurrentBackgroundAsync(), hasPage && !string.IsNullOrWhiteSpace(_currentPage?.BackgroundImageData) && _recognitionCancellation is null));
+        menu.Items.Add(CreateMenuItem("整本批量离线 OCR…", "", async (_, _) => await RecognizeNotebookBackgroundsAsync(), hasNotebook && !_isReadOnly && _recognitionCancellation is null));
+        if (_recognitionCancellation is not null) menu.Items.Add(CreateMenuItem("取消批量 OCR", "", (_, _) => CancelNotebookRecognition(), true));
+        menu.Items.Add(CreateMenuItem("校对当前页 OCR 结果…", "", (_, _) => ReviewCurrentOcr(), hasPage && !string.IsNullOrWhiteSpace(_currentPage?.OcrText) && !_isReadOnly));
         menu.Items.Add(new Separator());
         menu.Items.Add(CreateMenuItem("复制当前页文字", "", (_, _) => CopyCurrentPageText(), hasPage));
         menu.Items.Add(CreateMenuItem("复制整本笔记文字", "", (_, _) => CopyNotebookText(), hasNotebook));

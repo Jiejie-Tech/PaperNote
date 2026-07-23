@@ -29,8 +29,29 @@ try
         using var image = SKImage.FromBitmap(bitmap);
         using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
         using var recognition = new OfflineRecognitionService(ocrModelDirectory);
-        var result = recognition.RecognizeImage(encoded.ToArray());
+        var sampleBytes = encoded.ToArray();
+        var result = recognition.RecognizeImage(sampleBytes);
         Assert(result.HasText && result.Text.Contains("2026", StringComparison.OrdinalIgnoreCase), $"离线 OCR 应能识别清晰的拉丁文字和数字，实际：{result.Text}");
+
+        var reviewPage = new NotebookPage();
+        NotebookRecognitionService.ApplyResult(reviewPage, result, reviewConfidenceThreshold: 1);
+        Assert(reviewPage.OcrText.Contains("2026", StringComparison.OrdinalIgnoreCase) && reviewPage.OcrBlocks.Count > 0, "识别结果应保存逐行文本、区域和置信度");
+        Assert(reviewPage.OcrNeedsReview && reviewPage.OcrUpdatedAt.HasValue, "低于校对阈值的页面应进入本地校对队列");
+        NotebookRecognitionService.ApplyReviewedText(reviewPage, "PaperNote corrected 2026");
+        Assert(!reviewPage.OcrNeedsReview && reviewPage.OcrAverageConfidence == 1 && reviewPage.OcrBlocks.Single().IsEdited, "人工校对应更新索引并清除待校对状态");
+
+        var batchDocument = NotebookDocument.Create("OCR batch");
+        batchDocument.Pages[0].BackgroundImageData = Convert.ToBase64String(sampleBytes);
+        batchDocument.Pages[0].OcrText = "existing";
+        batchDocument.Pages.Add(new NotebookPage { BackgroundImageData = Convert.ToBase64String(sampleBytes), BackgroundSourceType = "Image" });
+        var progressEvents = new List<OfflineRecognitionBatchProgress>();
+        var batchSummary = await NotebookRecognitionService.RecognizeNotebookAsync(
+            batchDocument,
+            recognition,
+            new OfflineRecognitionBatchOptions(ReplaceExisting: false),
+            new Progress<OfflineRecognitionBatchProgress>(item => progressEvents.Add(item)));
+        Assert(batchSummary.RecognizedPages == 1 && batchSummary.SkippedPages == 1 && batchSummary.FailedPages == 0, "整本 OCR 应跳过已有结果并识别剩余页面");
+        Assert(batchDocument.Pages[1].OcrText.Contains("2026", StringComparison.OrdinalIgnoreCase), "整本 OCR 应把结果写入对应页面搜索索引");
     }
 
     var eraseDocument = new PaperInkDocument();
@@ -361,7 +382,7 @@ try
     document.Pages[0].Objects.Add(new PageObject { Kind = "Text", Text = "矩阵分解与特征值" });
     var stored = await storage.CreateAsync(document);
     var loaded = await storage.LoadAsync(stored.FilePath);
-    Assert(loaded.FormatVersion == 17 && loaded.Pages[0].Ink.Strokes.Count == 2, "保存后应使用格式 17 并保留 PaperInk");
+    Assert(loaded.FormatVersion == 19 && loaded.Pages[0].Ink.Strokes.Count == 2, "保存后应使用格式 18 并保留 PaperInk");
     Assert(NotebookContentService.TryMatch(loaded, "特征值", out var summary) && summary.Length > 0, "全局搜索应匹配文本对象");
 
     loaded.Tags = ["数学", "复习"];
@@ -420,7 +441,7 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
     await storage.SaveAsync(loaded, stored.FilePath);
     var audioRoundTrip = await storage.LoadAsync(stored.FilePath);
     var roundTripRecording = audioRoundTrip.Pages.SelectMany(page => page.AudioRecordings).Single(item => item.Id == recording.Id);
-    Assert(roundTripRecording.WaveformPeaks.SequenceEqual(new[] { 0f, .5f, 1f }), "格式 17 应往返保存并修复非法波形峰值");
+    Assert(roundTripRecording.WaveformPeaks.SequenceEqual(new[] { 0f, .5f, 1f }), "格式 18 应往返保存并修复非法波形峰值");
     var encryption = new NotebookEncryptionService();
     var encrypted = encryption.Encrypt(loaded, "correct horse battery");
     Assert(NotebookEncryptionService.IsEncrypted(encrypted) && encryption.Decrypt(encrypted, "correct horse battery").Title == loaded.Title, "笔记本加密应可往返");
@@ -690,7 +711,7 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
 
         var studyStored = await studyStorage.CreateAsync(studyDocument);
         var studyLoaded = await studyStorage.LoadAsync(studyStored.FilePath);
-        Assert(studyLoaded.FormatVersion == 17, "PDF 学习资料应保存为格式 17");
+        Assert(studyLoaded.FormatVersion == 19, "PDF 学习资料应保存为格式 18");
         Assert(studyLoaded.OutlineEntries.Count == 1 && studyLoaded.OutlineEntries[0].Level == 6, "PDF 目录层级应规范化并往返保存");
         Assert(studyLoaded.Pages[0].BackgroundSourceFingerprint == "fixture-sha256" && studyLoaded.Pages[0].PdfText.Contains("eigenvalue lesson", StringComparison.Ordinal), "PDF 指纹和文本层应往返保存");
         Assert(studyLoaded.Pages[0].PdfLinks.Count == 1 && studyLoaded.Pages[0].PdfLinks[0].X == 0 && studyLoaded.Pages[0].PdfLinks[0].Y == 0 && studyLoaded.Pages[0].PdfLinks[0].Width == 1 && studyLoaded.Pages[0].PdfLinks[0].Height == 1, "非法 PDF 链接坐标应限制到页面范围");
@@ -771,6 +792,15 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
     };
     Assert(GeometryAssistService.NormalizeStroke(assistedRectangle) == GeometryAssistResult.Rectangle, "Geometry assist should recognize a rough rectangle");
     Assert(assistedRectangle.Points.Count == 5, "Recognized rectangle should be normalized to four corners");
+    var measurementPage = new NotebookPage { Ink = new PaperInkDocument { Strokes = [new PaperInkStroke { Points = [new PaperInkPoint { X = 100, Y = 200 }, new PaperInkPoint { X = 500, Y = 200 }] }] } };
+    var measurement = GeometryMeasurementService.MeasureSelection(measurementPage, [measurementPage.Ink.Strokes[0].Id], []);
+    Assert(measurement is not null && Math.Abs(measurement.DirectDistanceMillimeters - 100) < .01 && Math.Abs(measurement.AngleDegrees) < .01, "Geometry measurement should use four page pixels per millimeter");
+    var ruler = GeometryMeasurementService.CreateRuler(100, 200, 100, 0);
+    Assert(ruler.Count == 22 && Math.Abs(ruler[0].Points[^1].X - ruler[0].Points[0].X - 400) < .01, "100 mm ruler should include a base line and 5 mm ticks");
+    var parallel = GeometryMeasurementService.CreateParallelLine(measurementPage.Ink.Strokes[0], 10);
+    Assert(Math.Abs(parallel.Points[0].Y - 240) < .01 && Math.Abs(parallel.Points[1].Y - 240) < .01, "Parallel construction should apply the requested millimeter offset");
+    var perpendicular = GeometryMeasurementService.CreatePerpendicularLine(measurementPage.Ink.Strokes[0], 50);
+    Assert(Math.Abs(perpendicular.Points[0].X - perpendicular.Points[1].X) < .01 && Math.Abs(perpendicular.Points[1].Y - perpendicular.Points[0].Y - 200) < .01, "Perpendicular construction should use the reference midpoint and requested length");
     var selectionStrokeId = Guid.NewGuid();
     var ignoredStrokeId = Guid.NewGuid();
     var selectionGroupId = Guid.NewGuid();
@@ -857,6 +887,187 @@ Assert(AudioTimelineService.AddCue(recording, 1_000, label: "书写") && AudioTi
     var studyLocation = StudyAssistService.FindAudioForStroke(studyPage, studyStrokeId);
     Assert(studyLocation is not null && studyLocation.Cue.OffsetMilliseconds == 4_200 && studyLocation.Recording.Id == studyRecording.Id, "Selected ink should resolve its recording time");
     Assert(StudyAssistService.FindAudioForStroke(studyPage, Guid.NewGuid()) is null, "Unlinked ink should not resolve an audio cue");
+
+    // Format 19 round-trip and advanced offline workflows.
+    var advancedStorage = new NotebookStorageService(Path.Combine(root, "AdvancedNotebooks"), Path.Combine(root, "AdvancedBackups"));
+    var advancedDocument = NotebookDocument.Create("Advanced offline round-trip");
+    var advancedPage = advancedDocument.Pages[0];
+    advancedPage.BackgroundImageData = Convert.ToBase64String([1, 2, 3, 4]);
+    advancedPage.BackgroundSourceType = "PDF";
+    advancedPage.PdfText = "second first";
+    advancedPage.PdfTextBlocks =
+    [
+        new PdfTextBlock { Text = "second", X = .8, Y = -.2, Width = .5, Height = 2, ReadingOrder = 2 },
+        new PdfTextBlock { Text = "first", X = .1, Y = .2, Width = .3, Height = .1, ReadingOrder = 1 }
+    ];
+    advancedPage.PdfPixelsPerMillimeter = 5.25;
+    var requiredTextField = PdfAdvancedWorkflowService.AddTextField(advancedPage, "Student", 100, 120, required: true);
+    var requiredCheckbox = PdfAdvancedWorkflowService.AddCheckbox(advancedPage, "Accepted", 100, 220, required: true);
+    var formulaLatex = MathFormulaService.ToLatex("1/2 + x^2 ≤ π");
+    advancedPage.Objects.Add(MathFormulaService.CreateFormulaObject(formulaLatex));
+    var advancedRecording = AudioTimelineService.AddRecording(advancedPage, "lesson.m4a", 20_000, "Lesson", 1234, "audio/mp4");
+    advancedRecording.SampleRate = 32_000;
+    advancedRecording.BitRate = 64_000;
+    advancedRecording.InputDeviceName = "System microphone";
+    advancedRecording.TrimStartMilliseconds = 1_500;
+    advancedRecording.TrimEndMilliseconds = 17_500;
+    AudioTimelineService.AddCue(advancedRecording, 4_000, label: "Definition");
+    var advancedStored = await advancedStorage.CreateAsync(advancedDocument);
+    var advancedLoaded = await advancedStorage.LoadAsync(advancedStored.FilePath);
+    var advancedLoadedPage = advancedLoaded.Pages.Single();
+    var advancedLoadedRecording = advancedLoadedPage.AudioRecordings.Single();
+    Assert(advancedLoaded.FormatVersion == 19, "Advanced notebook data should round-trip as format 19");
+    Assert(advancedLoadedPage.PdfTextBlocks.Select(block => block.ReadingOrder).SequenceEqual([1, 2]), "PDF text blocks should normalize and preserve reading order");
+    Assert(advancedLoadedPage.PdfTextBlocks.All(block => block.X >= 0 && block.Y >= 0 && block.X + block.Width <= 1.0001 && block.Y + block.Height <= 1.0001), "PDF text block coordinates should be normalized to page units");
+    Assert(Math.Abs(advancedLoadedPage.PdfPixelsPerMillimeter - 5.25) < .001, "PDF measurement calibration should round-trip");
+    Assert(advancedLoadedPage.Objects.Any(item => item.FormFieldKind == "Text" && item.FormFieldRequired) && advancedLoadedPage.Objects.Any(item => item.FormFieldKind == "Checkbox" && item.FormFieldRequired), "PDF form metadata should round-trip");
+    Assert(advancedLoadedPage.Objects.Any(item => item.FormulaLatex == formulaLatex), "Formula metadata should round-trip");
+    Assert(advancedLoadedRecording.SampleRate == 32_000 && advancedLoadedRecording.BitRate == 64_000 && advancedLoadedRecording.InputDeviceName == "System microphone", "Recording quality and input metadata should round-trip");
+    Assert(advancedLoadedRecording.TrimStartMilliseconds == 1_500 && advancedLoadedRecording.TrimEndMilliseconds == 17_500, "Recording trim metadata should round-trip");
+
+    Assert(!PdfAdvancedWorkflowService.Validate(advancedPage).IsValid, "Required PDF overlay fields should fail validation before completion");
+    Assert(PdfAdvancedWorkflowService.SetFieldValue(requiredTextField, "Ada") && PdfAdvancedWorkflowService.SetFieldValue(requiredCheckbox, null, true), "PDF text and checkbox fields should accept local values");
+    Assert(PdfAdvancedWorkflowService.Validate(advancedPage).IsValid && requiredCheckbox.Text == "☑", "Completed PDF overlay fields should pass validation");
+    var signatureRejected = false;
+    try { PdfAdvancedWorkflowService.AddSignature(advancedPage, "Signature", "not-base64", 50, 50); }
+    catch (ArgumentException) { signatureRejected = true; }
+    Assert(signatureRejected, "Invalid signature image data should be rejected");
+    var signatureField = PdfAdvancedWorkflowService.AddSignature(advancedPage, "Signature", Convert.ToBase64String([137, 80, 78, 71]), 50, 50);
+    Assert(signatureField.FormFieldKind == "Signature" && signatureField.IsLocked && signatureField.FormFieldValue == "signed", "A local signature should be stored as a locked PDF overlay");
+    Assert(Math.Abs(PdfAdvancedWorkflowService.CalibrateMeasurement(advancedPage, 800, 200) - 4) < .001, "PDF measurement calibration should derive pixels per millimeter");
+
+    Assert(formulaLatex.Contains(@"\frac{1}{2}", StringComparison.Ordinal) && formulaLatex.Contains(@"\le", StringComparison.Ordinal) && formulaLatex.Contains(@"\pi", StringComparison.Ordinal), "Basic recognized math should convert to single-backslash LaTeX commands");
+    Assert(MathFormulaService.IsBalanced(@"x^{2}+\frac{1}{2}") && !MathFormulaService.IsBalanced(@"x^{2"), "Formula brace validation should detect malformed LaTeX");
+    var formulaSvg = MathFormulaService.ExportSvg("x < y & z");
+    Assert(formulaSvg.Contains("x &lt; y &amp; z", StringComparison.Ordinal) && formulaSvg.StartsWith("<svg", StringComparison.Ordinal), "Formula SVG export should escape XML-sensitive text");
+    var formulaObject = MathFormulaService.CreateFormulaObject(formulaLatex);
+    Assert(formulaObject.Kind == "Text" && formulaObject.FormulaLatex == formulaLatex && formulaObject.AltText.Contains(formulaLatex, StringComparison.Ordinal), "Formula objects should preserve LaTeX and accessibility text");
+
+    // Notebook merge must remap every page-scoped identity and internal reference, even when the same source is merged twice.
+    var mergeSource = NotebookDocument.Create("Merge source");
+    var mergeFirst = mergeSource.Pages[0];
+    var mergeSecond = new NotebookPage { Title = "Second" };
+    mergeSource.Pages.Add(mergeSecond);
+    var mergeLayer = new PageLayer { Name = "Ink" };
+    mergeFirst.Layers = [mergeLayer];
+    mergeFirst.ActiveLayerId = mergeLayer.Id;
+    var mergeStroke = new PaperInkStroke { LayerId = mergeLayer.Id, Points = [new PaperInkPoint { X = 10, Y = 10 }, new PaperInkPoint { X = 50, Y = 50 }] };
+    mergeFirst.Ink.Strokes.Add(mergeStroke);
+    var mergeGroup = Guid.NewGuid();
+    mergeFirst.Objects.Add(new PageObject { Text = "Jump", GroupId = mergeGroup, LayerId = mergeLayer.Id, LinkTargetPageId = mergeSecond.Id });
+    mergeFirst.Objects.Add(new PageObject { Text = "Grouped", GroupId = mergeGroup, LayerId = mergeLayer.Id });
+    mergeFirst.PdfLinks.Add(new PdfPageLink { TargetPageId = mergeSecond.Id, Label = "Next" });
+    mergeFirst.OcrBlocks.Add(new RecognitionTextBlock { Text = "OCR" });
+    mergeFirst.PdfTextBlocks.Add(new PdfTextBlock { Text = "PDF" });
+    mergeFirst.Comments.Add(new PageComment { Text = "Comment" });
+    var mergeRecording = AudioTimelineService.AddRecording(mergeFirst, "merge.m4a", 10_000);
+    AudioTimelineService.AddCue(mergeRecording, 2_000, mergeStroke.Id, "Stroke cue");
+    mergeSource.OutlineEntries.Add(new DocumentOutlineEntry { Title = "Second", TargetPageId = mergeSecond.Id });
+    var mergeTarget = NotebookDocument.Create("Merge target");
+    var mergeResultOne = NotebookMergeService.MergeInto(mergeTarget, [mergeSource]);
+    var mergeResultTwo = NotebookMergeService.MergeInto(mergeTarget, [mergeSource]);
+    Assert(mergeResultOne.AddedPages == 2 && mergeResultOne.AddedOutlineEntries == 1 && mergeResultTwo.AddedPages == 2, "Notebook merge should add pages and mapped outline entries");
+    var mergedPages = mergeTarget.Pages.Where(page => mergeResultOne.PageIds.Concat(mergeResultTwo.PageIds).Contains(page.Id)).ToArray();
+    Assert(mergedPages.Select(page => page.Id).Distinct().Count() == 4, "Merged pages should always receive fresh IDs");
+    Assert(mergedPages.SelectMany(page => page.Ink.Strokes).Select(stroke => stroke.Id).Distinct().Count() == 2, "Repeated notebook merges should not reuse stroke IDs");
+    Assert(mergedPages.SelectMany(page => page.Layers).Select(layer => layer.Id).Distinct().Count() == mergedPages.Sum(page => page.Layers.Count), "Merged layers should receive fresh IDs");
+    Assert(mergedPages.SelectMany(page => page.Objects).Select(item => item.Id).Distinct().Count() == mergedPages.Sum(page => page.Objects.Count), "Merged objects should receive fresh IDs");
+    var firstMergedPair = mergeResultOne.PageIds.Select(id => mergeTarget.Pages.Single(page => page.Id == id)).ToArray();
+    Assert(firstMergedPair[0].Objects[0].LinkTargetPageId == firstMergedPair[1].Id && firstMergedPair[0].PdfLinks[0].TargetPageId == firstMergedPair[1].Id, "Merged object and PDF links should target remapped pages");
+    Assert(firstMergedPair[0].Objects.Select(item => item.GroupId).Distinct().Single() is Guid mergedGroup && mergedGroup != mergeGroup, "Merged groups should preserve grouping with a fresh group ID");
+    Assert(firstMergedPair[0].Ink.Strokes[0].LayerId == firstMergedPair[0].Layers[0].Id && firstMergedPair[0].Objects.All(item => item.LayerId == firstMergedPair[0].Layers[0].Id), "Merged content should reference remapped layers");
+    Assert(firstMergedPair[0].AudioRecordings[0].Cues[0].StrokeId == firstMergedPair[0].Ink.Strokes[0].Id, "Merged audio cues should reference remapped strokes");
+    Assert(mergeTarget.OutlineEntries.Any(entry => entry.TargetPageId == firstMergedPair[1].Id), "Merged outline entries should target remapped pages");
+
+    // Safe declarative extensions.
+    var extensionDirectory = Path.Combine(root, "extensions");
+    var extensionPackage = Path.Combine(root, "safe-extension.zip");
+    var extensionManifest = new LocalExtensionManifest
+    {
+        Id = "study-tools",
+        Name = "Study tools",
+        Commands =
+        [
+            new LocalTextCommand { Id = "upper", Operation = "Uppercase" },
+            new LocalTextCommand { Id = "prefix", Operation = "Prefix", Argument = "NOTE: " },
+            new LocalTextCommand { Id = "replace", Operation = "Replace", Argument = "old", Replacement = "new" },
+            new LocalTextCommand { Id = "regex", Operation = "RegexReplace", Argument = @"\s+", Replacement = " " }
+        ]
+    };
+    CreateManifestPackage(extensionPackage, extensionManifest);
+    var extensionService = new LocalExtensionService(extensionDirectory);
+    var installedExtension = await extensionService.ImportAsync(extensionPackage);
+    Assert((await extensionService.LoadAsync()).Single().Id == "study-tools", "Imported declarative extensions should reload from local storage");
+    Assert(LocalExtensionService.Execute(installedExtension.Commands[0], "abc") == "ABC", "Uppercase extension command should run locally");
+    Assert(LocalExtensionService.Execute(installedExtension.Commands[1], "abc") == "NOTE: abc", "Prefix extension command should run locally");
+    Assert(LocalExtensionService.Execute(installedExtension.Commands[2], "old value") == "new value", "Replace extension command should run locally");
+    Assert(LocalExtensionService.Execute(installedExtension.Commands[3], "a   b") == "a b", "Regex replace extension command should run with a timeout");
+    var unsupportedCommandRejected = false;
+    try { _ = LocalExtensionService.Execute(new LocalTextCommand { Operation = "ExecuteProgram" }, "text"); }
+    catch (InvalidOperationException) { unsupportedCommandRejected = true; }
+    Assert(unsupportedCommandRejected, "Extensions must never execute unsupported operations");
+    var invalidExtensionPackage = Path.Combine(root, "invalid-extension.zip");
+    CreateManifestPackage(invalidExtensionPackage, new LocalExtensionManifest { Id = "unsafe", Commands = [new LocalTextCommand { Id = "bad", Operation = "ExecuteProgram" }] });
+    var invalidExtensionRejected = false;
+    try { _ = await extensionService.ImportAsync(invalidExtensionPackage); }
+    catch (InvalidDataException) { invalidExtensionRejected = true; }
+    Assert(invalidExtensionRejected, "Unsafe extension manifest operations should be rejected at import");
+    var oversizedExtensionPackage = Path.Combine(root, "oversized-extension.zip");
+    CreateManifestPackage(oversizedExtensionPackage, new LocalExtensionManifest
+    {
+        Id = "too-many",
+        Commands = Enumerable.Range(0, LocalExtensionService.MaximumCommandsPerExtension + 1).Select(index => new LocalTextCommand { Id = $"c{index}", Operation = "Uppercase" }).ToList()
+    });
+    var oversizedExtensionRejected = false;
+    try { _ = await extensionService.ImportAsync(oversizedExtensionPackage); }
+    catch (InvalidDataException) { oversizedExtensionRejected = true; }
+    Assert(oversizedExtensionRejected && extensionService.Remove("study-tools") && (await extensionService.LoadAsync()).Count == 0, "Extension limits and removal should be enforced");
+
+    // Integrity-checked local material and template packs.
+    var packMaterial = new SelectionMaterial
+    {
+        Name = "Integral card", Category = "Math", Keywords = ["integral", "calculus"], IsFavorite = true,
+        Width = 200, Height = 120, Strokes = [new PaperInkStroke { Points = [new PaperInkPoint { X = 0, Y = 0 }, new PaperInkPoint { X = 20, Y = 20 }] }]
+    };
+    var packTemplate = new SharedPaperTemplate { Name = "Cornell", PaperTemplate = "Lined", Category = "Study", Keywords = ["class"] };
+    var resourcePackPath = Path.Combine(root, "study-resources.pnpack");
+    await LocalResourcePackService.ExportAsync(resourcePackPath, "Study resources", [packMaterial], [packTemplate], "Offline pack");
+    Assert(File.Exists(resourcePackPath) && new FileInfo(resourcePackPath).Length > 0, "Resource pack export should atomically create a local archive");
+    var resourceImport = await LocalResourcePackService.ImportAsync(resourcePackPath);
+    Assert(resourceImport.Materials.Count == 1 && resourceImport.Templates.Count == 1 && resourceImport.SkippedDuplicates == 0, "Resource pack import should preserve materials and templates");
+    Assert(resourceImport.Materials[0].Id != packMaterial.Id && resourceImport.Templates[0].Id != packTemplate.Id, "Imported resources should receive fresh IDs");
+    var duplicateResourceImport = await LocalResourcePackService.ImportAsync(resourcePackPath, [packMaterial], [packTemplate]);
+    Assert(duplicateResourceImport.Materials.Count == 0 && duplicateResourceImport.Templates.Count == 0 && duplicateResourceImport.SkippedDuplicates == 2, "Resource pack import should skip existing duplicates");
+    var sortedMaterials = LocalResourcePackService.SortMaterials(
+        [packMaterial, new SelectionMaterial { Name = "Biology card", Category = "Science", Keywords = ["cell"] }],
+        query: "integral", category: "Math").ToArray();
+    Assert(sortedMaterials.Length == 1 && sortedMaterials[0].Name == "Integral card", "Material search should combine category and keyword filters");
+    var tamperedPackPath = Path.Combine(root, "tampered-resources.pnpack");
+    File.Copy(resourcePackPath, tamperedPackPath, true);
+    using (var tamperedArchive = ZipFile.Open(tamperedPackPath, ZipArchiveMode.Update))
+    {
+        var resourceEntry = tamperedArchive.GetEntry("resources.json") ?? throw new InvalidOperationException("Missing resource payload");
+        resourceEntry.Delete();
+        var replacementEntry = tamperedArchive.CreateEntry("resources.json");
+        await using var replacementStream = replacementEntry.Open();
+        await replacementStream.WriteAsync(Encoding.UTF8.GetBytes("{\"Materials\":[],\"Templates\":[]}"));
+    }
+    var tamperedPackRejected = false;
+    try { _ = await LocalResourcePackService.ImportAsync(tamperedPackPath); }
+    catch (InvalidDataException) { tamperedPackRejected = true; }
+    Assert(tamperedPackRejected, "Resource pack SHA-256 tampering should be rejected");
+
+    // Storage estimates and detailed recording timeline editing.
+    Assert(StorageCapacityService.CalculateRequiredBytes(100, 50, 25) == 275, "Storage estimates should include temporary data, replacement and reserve");
+    Assert(StorageCapacityService.HasEnoughSpace(275, 100, 50, 25) && !StorageCapacityService.HasEnoughSpace(274, 100, 50, 25), "Storage availability checks should use the calculated boundary");
+    var editTimelineRecording = new AudioRecording { DurationMilliseconds = 10_000 };
+    AudioTimelineService.AddCue(editTimelineRecording, 2_000, label: "Original");
+    var editTimelineCueId = editTimelineRecording.Cues.Single().Id;
+    Assert(AudioTimelineService.MoveCue(editTimelineRecording, editTimelineCueId, 4_500) && editTimelineRecording.Cues.Single().OffsetMilliseconds == 4_500, "Audio cues should move within the recording duration");
+    Assert(AudioTimelineService.RenameCue(editTimelineRecording, editTimelineCueId, "Renamed") && editTimelineRecording.Cues.Single().Label == "Renamed", "Audio cues should be renameable");
+    AudioTimelineService.SetTrimRange(editTimelineRecording, 1_000, 8_000);
+    Assert(AudioTimelineService.GetEffectiveDuration(editTimelineRecording) == 7_000, "Audio trim ranges should expose the effective duration");
+    Assert(AudioTimelineService.RemoveCue(editTimelineRecording, editTimelineCueId) && editTimelineRecording.Cues.Count == 0, "Audio cues should be removable");
 
     Console.WriteLine("PAPERNOTE CORE TESTS PASS");
 }
@@ -951,6 +1162,14 @@ static byte[] CreatePcm16Wave(IReadOnlyList<short> samples, int sampleRate)
     writer.Flush();
     return stream.ToArray();
 }
+static void CreateManifestPackage(string path, LocalExtensionManifest manifest)
+{
+    using var archive = new ZipArchive(File.Create(path), ZipArchiveMode.Create);
+    var entry = archive.CreateEntry("manifest.json");
+    using var stream = entry.Open();
+    JsonSerializer.Serialize(stream, manifest);
+}
+
 static void Assert(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);

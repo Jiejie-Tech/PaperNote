@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 using PaperNote.Core.Models;
 
@@ -13,6 +13,10 @@ public sealed class SharedPaperTemplate
     public string BackgroundImageData { get; set; } = string.Empty;
     public string SourceName { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
+    public string Category { get; set; } = "未分类";
+    public List<string> Keywords { get; set; } = [];
+    public bool IsFavorite { get; set; }
 }
 
 public sealed class PaperTemplateLibraryService
@@ -76,6 +80,9 @@ public sealed class PaperTemplateLibraryService
                 catch (FormatException) { template.BackgroundImageData = string.Empty; }
             }
             template.SourceName = string.IsNullOrWhiteSpace(template.SourceName) ? string.Empty : Path.GetFileName(template.SourceName.Trim());
+            template.Category = string.IsNullOrWhiteSpace(template.Category) ? "未分类" : template.Category.Trim()[..Math.Min(template.Category.Trim().Length, 40)];
+            template.Keywords = (template.Keywords ?? []).Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()[..Math.Min(value.Trim().Length, 30)]).Distinct(StringComparer.CurrentCultureIgnoreCase).Take(20).ToList();
+            if (template.UpdatedAt < template.CreatedAt) template.UpdatedAt = template.CreatedAt;
             if (result.Any(item => item.Id == template.Id)) template.Id = Guid.NewGuid();
             result.Add(template);
             if (result.Count >= MaximumTemplates) break;

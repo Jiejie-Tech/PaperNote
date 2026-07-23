@@ -71,6 +71,8 @@ public partial class MainWindow : Window
         _workspaceStateService = workspaceStateService ?? throw new ArgumentNullException(nameof(workspaceStateService));
         _skipStartupInitialization = skipStartupInitialization;
         InitializeComponent();
+        Loaded += (_, _) => AccessibilitySupport.Apply(this);
+        Activated += (_, _) => AccessibilitySupport.Apply(this);
         NotebookList.ItemsSource = _notebookCards;
         LibraryFilterList.ItemsSource = _libraryFilters;
         NotebookFolderCombo.ItemsSource = _folderChoices;
